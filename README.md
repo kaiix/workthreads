@@ -1,0 +1,129 @@
+# workthreads
+
+`workthreads` provides the `wt` CLI: a developer-first workflow tool for creating, preparing, listing, and deleting git worktrees.
+
+## Setup
+
+Prerequisites:
+
+- Git
+- Python 3.12+
+- [`uv`](https://docs.astral.sh/uv/)
+
+Install dependencies for local development:
+
+```bash
+uv sync
+```
+
+Run the CLI from the repo during development:
+
+```bash
+uv run wt --help
+```
+
+Install `wt` once so it is available globally on your PATH and you do not need to use `uv run` every time:
+
+```bash
+uv tool install -e .
+wt --help
+```
+
+Alternative user-level install without uv-managed tools:
+
+```bash
+python3 -m pip install --user -e .
+wt --help
+```
+
+## Shell setup
+
+Full shell integration includes completion and `wt add --cd` support:
+
+```bash
+eval "$(wt init zsh)"   # zsh
+eval "$(wt init bash)"  # bash
+eval "$(wt init fish)"  # fish
+```
+
+Completion only:
+
+```bash
+eval "$(wt completion zsh)"
+```
+
+## Basic usage
+
+Configure repo defaults:
+
+```bash
+wt config set defaults.worktreesDir ../workthreads
+wt config set defaults.base origin/main
+wt config set defaults.copyLocal true
+```
+
+Create a worktree:
+
+```bash
+wt add feature/payment-retry
+```
+
+Create one at an exact path and copy ignored/untracked local files:
+
+```bash
+wt add feature/payment-retry \
+  --base origin/main \
+  --path ../workthreads/payment-retry \
+  --copy-local
+```
+
+Create and enter the new worktree when shell integration is enabled:
+
+```bash
+wt add feature/payment-retry --cd
+```
+
+List worktrees:
+
+```bash
+wt list
+wt list --json
+```
+
+Delete the current linked worktree:
+
+```bash
+wt delete
+```
+
+Delete a named worktree from elsewhere:
+
+```bash
+wt delete feature/payment-retry
+```
+
+## Hooks
+
+Configure lifecycle hooks:
+
+```bash
+wt config set hooks.postCreate ./scripts/wt-post-create.sh
+wt config set hooks.preDelete ./scripts/wt-pre-delete.sh
+```
+
+Hooks receive stable `WT_*` environment variables such as `WT_EVENT`, `WT_REPO_ROOT`, `WT_WORKTREE_PATH`, `WT_BRANCH`, and `WT_BASE`.
+
+## Development
+
+Run tests:
+
+```bash
+uv run pytest
+```
+
+Run a quick CLI smoke check:
+
+```bash
+uv run wt
+uv run wt completion zsh
+```

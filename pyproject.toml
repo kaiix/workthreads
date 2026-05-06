@@ -1,0 +1,25 @@
+[project]
+name = "workthreads"
+version = "0.1.0"
+description = "Developer-first git worktree workflow CLI"
+readme = "docs/notes/workthreads-wt-cli-design.md"
+requires-python = ">=3.12"
+dependencies = [
+  "rich>=13.7",
+]
+
+[project.scripts]
+wt = "workthreads.cli:main"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
