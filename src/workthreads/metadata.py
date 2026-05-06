@@ -5,6 +5,8 @@ from pathlib import Path
 import hashlib
 import json
 
+from . import git
+
 
 @dataclass(frozen=True)
 class WorktreeMetadata:
@@ -14,7 +16,7 @@ class WorktreeMetadata:
 
 
 def metadata_dir(repo_root: Path) -> Path:
-    return repo_root / ".workthreads" / "worktrees"
+    return git.common_dir(repo_root) / "workthreads" / "worktrees"
 
 
 def metadata_id(path: Path) -> str:

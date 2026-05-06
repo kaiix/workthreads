@@ -26,6 +26,7 @@ def test_hook_env_contains_stable_values(tmp_path: Path) -> None:
     assert env["WT_COPY_LOCAL"] == "1"
     assert env["WT_COPY_IGNORED"] == "1"
     assert env["WT_COPY_UNTRACKED"] == "1"
+    assert env["WT_CONFIG_FILE"].endswith("/repo/workthreads.toml")
 
 
 def test_hook_failure_is_structured(tmp_path: Path) -> None:

@@ -365,7 +365,7 @@ WT_COPY_LOCAL=0|1
 WT_COPY_IGNORED=0|1
 WT_COPY_UNTRACKED=0|1
 WT_DIRTY=0|1
-WT_CONFIG_FILE=/repo/.workthreads/config.toml
+WT_CONFIG_FILE=/repo/workthreads.toml
 ```
 
 ## Cleanup on Failure
@@ -492,6 +492,16 @@ Example:
 ```
 
 ## Configuration
+
+Repo-local config should live at the repository root:
+
+```text
+workthreads.toml
+```
+
+This is better than `.workthreads/config.toml` for the editable project configuration because it is easy to discover, review, and commit. Internal workthreads state should not live in the working tree; it belongs under git's common directory.
+
+For migration, the CLI may read an existing `.workthreads/config.toml` as a legacy fallback when present, but new `wt config set` writes should target `workthreads.toml`.
 
 Suggested repo-local config:
 

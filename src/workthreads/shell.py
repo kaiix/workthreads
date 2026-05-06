@@ -67,7 +67,9 @@ _wt() {
     _describe 'flag' flags
   fi
 }
-compdef _wt wt
+if (( $+functions[compdef] )); then
+  compdef _wt wt
+fi
 '''
 
 
@@ -106,16 +108,16 @@ __wt_should_cd() {
   [ "$("$__wt_bin" config get shell.cdAfterAdd 2>/dev/null)" = "true" ]
 }
 wt() {
-  local tmp status last
+  local tmp wt_status last
   tmp="$(mktemp)"
   WT_SHELL_INTEGRATION=1 "$__wt_bin" "$@" | tee "$tmp"
-  status="${PIPESTATUS[0]}"
-  if [ "$status" -eq 0 ] && __wt_should_cd "$@"; then
+  wt_status="${PIPESTATUS[0]}"
+  if [ "$wt_status" -eq 0 ] && __wt_should_cd "$@"; then
     last="$(tail -n 1 "$tmp")"
     [ -d "$last" ] && cd "$last"
   fi
   rm -f "$tmp"
-  return "$status"
+  return "$wt_status"
 }
 '''
 
@@ -130,16 +132,16 @@ __wt_should_cd() {
   [ "$("$__wt_bin" config get shell.cdAfterAdd 2>/dev/null)" = "true" ]
 }
 wt() {
-  local tmp status last
+  local tmp wt_status last
   tmp="$(mktemp)"
   WT_SHELL_INTEGRATION=1 "$__wt_bin" "$@" | tee "$tmp"
-  status="${pipestatus[1]}"
-  if [ "$status" -eq 0 ] && __wt_should_cd "$@"; then
+  wt_status="${pipestatus[1]}"
+  if [ "$wt_status" -eq 0 ] && __wt_should_cd "$@"; then
     last="$(tail -n 1 "$tmp")"
     [ -d "$last" ] && cd "$last"
   fi
   rm -f "$tmp"
-  return "$status"
+  return "$wt_status"
 }
 '''
 
@@ -157,12 +159,12 @@ end
 function wt
   set -l tmp (mktemp)
   env WT_SHELL_INTEGRATION=1 $__wt_bin $argv | tee $tmp
-  set -l status $pipestatus[1]
-  if test "$status" -eq 0; and __wt_should_cd $argv
+  set -l wt_status $pipestatus[1]
+  if test "$wt_status" -eq 0; and __wt_should_cd $argv
     set -l last (tail -n 1 $tmp)
     test -d "$last"; and cd "$last"
   end
   rm -f $tmp
-  return $status
+  return $wt_status
 end
 '''

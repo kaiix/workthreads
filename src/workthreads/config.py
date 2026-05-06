@@ -9,6 +9,10 @@ import tomllib
 from .errors import UsageError
 
 
+REPO_CONFIG_FILENAME = "workthreads.toml"
+LEGACY_REPO_CONFIG = Path(".workthreads") / "config.toml"
+
+
 BUILTIN_CONFIG: dict[str, dict[str, object]] = {
     "defaults": {
         "worktreesDir": "../workthreads",
@@ -38,7 +42,7 @@ class Config:
     def repo_config_path(self) -> Path | None:
         if self.repo_root is None:
             return None
-        return self.repo_root / ".workthreads" / "config.toml"
+        return repo_config_path(self.repo_root)
 
     def get(self, key: str, default: object = None) -> object:
         try:
@@ -67,11 +71,22 @@ def global_config_path() -> Path:
 
 def load_config(repo_root: Path | None = None) -> Config:
     values = deepcopy(BUILTIN_CONFIG)
-    for path in (global_config_path(), repo_root / ".workthreads" / "config.toml" if repo_root else None):
+    repo_paths: tuple[Path | None, ...] = ()
+    if repo_root:
+        repo_paths = (legacy_repo_config_path(repo_root), repo_config_path(repo_root))
+    for path in (global_config_path(), *repo_paths):
         if path is None or not path.exists():
             continue
         merge_dict(values, read_toml(path))
     return Config(values=values, repo_root=repo_root)
+
+
+def repo_config_path(repo_root: Path) -> Path:
+    return repo_root / REPO_CONFIG_FILENAME
+
+
+def legacy_repo_config_path(repo_root: Path) -> Path:
+    return repo_root / LEGACY_REPO_CONFIG
 
 
 def read_toml(path: Path) -> dict[str, object]:
@@ -163,5 +178,5 @@ def format_toml_value(value: object) -> str:
 
 def writable_config_path(repo_root: Path | None) -> Path:
     if repo_root is not None:
-        return repo_root / ".workthreads" / "config.toml"
+        return repo_config_path(repo_root)
     return global_config_path()

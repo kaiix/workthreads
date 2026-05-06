@@ -62,6 +62,8 @@ wt config set defaults.base origin/main
 wt config set defaults.copyLocal true
 ```
 
+Repo-local configuration is written to `workthreads.toml` at the repository root so it can be reviewed and committed with the project.
+
 Create a worktree:
 
 ```bash

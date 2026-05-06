@@ -222,6 +222,14 @@ def current_branch(cwd: Path | str) -> str | None:
     return branch or None
 
 
+def common_dir(cwd: Path | str) -> Path:
+    result = run_git(["rev-parse", "--git-common-dir"], cwd=cwd)
+    path = Path(result.stdout.strip())
+    if not path.is_absolute():
+        path = Path(cwd) / path
+    return path.resolve()
+
+
 def add_worktree(branch: str, path: Path, base: str, cwd: Path | str) -> None:
     run_git(["worktree", "add", "-b", branch, str(path), base], cwd=cwd)
 

@@ -6,6 +6,7 @@ import os
 import subprocess
 
 from .errors import WTError
+from .config import repo_config_path
 
 
 @dataclass(frozen=True)
@@ -39,7 +40,7 @@ def hook_env(
         "WT_COPY_IGNORED": "1" if copy_ignored else "0",
         "WT_COPY_UNTRACKED": "1" if copy_untracked else "0",
         "WT_DIRTY": "1" if dirty else "0",
-        "WT_CONFIG_FILE": str(repo_root / ".workthreads" / "config.toml"),
+        "WT_CONFIG_FILE": str(repo_config_path(repo_root)),
     }
 
 

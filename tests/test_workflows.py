@@ -51,6 +51,7 @@ def test_add_list_and_delete_worktree_with_copy_and_hooks(tmp_path: Path, wt_env
     feature_row = next(row for row in rows if row["branch"] == "feature/demo")
     assert feature_row["path"] == str(destination)
     assert feature_row["base"] == "HEAD"
+    assert not (repo / ".workthreads").exists()
 
     deleted = run_wt(["delete", "feature/demo", "--force", "--delete-branch"], cwd=repo, env=wt_env)
     assert deleted.returncode == 0, deleted.stderr
