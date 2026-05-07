@@ -90,7 +90,6 @@ List worktrees:
 
 ```bash
 wt list
-wt list --json
 ```
 
 Delete the current linked worktree:

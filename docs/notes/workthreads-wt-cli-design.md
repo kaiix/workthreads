@@ -22,7 +22,7 @@ Developer Experience is the first design constraint. Common actions should be sh
 | Context-aware | Detect the repo root automatically. If `wt delete` is run inside a linked worktree, delete that current worktree by default. |
 | Short common path | The common commands are `wt add <branch>`, `wt delete`, and `wt list`. Aliases can exist, but docs and help should lead with the clearest names. |
 | Safe by default | Do not silently delete dirty worktrees. Do not overwrite copied files by default. Do not auto-remove a partially created worktree unless the user asks for cleanup. |
-| Human-friendly and scriptable | Default output should help humans. `--json` should be stable for scripts. Successful `wt add` should print the worktree path as the final line for shell integration. |
+| Human-friendly and scriptable | Default output should help humans. Successful commands should keep stable plain-text contracts where scripts need them, such as `wt add` printing the worktree path as the final line. |
 | Fixable errors | Errors should say what failed, why, and what to run next. |
 | Shell-native | Completion is part of the first version. Optional `cd` behavior belongs to shell integration, not the standalone binary. |
 
@@ -238,27 +238,6 @@ The final line is only the worktree path. Without shell integration, this is the
 cd "$(wt add feature/payment-retry --base origin/main | tail -n 1)"
 ```
 
-JSON output:
-
-```json
-{
-  "repoRoot": "/repo",
-  "worktreePath": "/repo/.worktrees/feature/payment-retry",
-  "branch": "feature/payment-retry",
-  "base": "origin/main",
-  "copied": {
-    "ignored": 12,
-    "untracked": 3
-  },
-  "hooks": {
-    "postCreate": {
-      "command": "./scripts/bootstrap.sh",
-      "exitCode": 0
-    }
-  }
-}
-```
-
 ### Directory switching rules
 
 `wt add` itself does not change the current directory. A standalone process cannot change the parent shell's cwd, so directory switching is a shell integration feature.
@@ -270,7 +249,6 @@ Rules:
 - Without active shell integration, `wt add --cd` fails with exit code `2` and a fixable hint.
 - `shell.cdAfterAdd = true` behaves like implicit `--cd` only in interactive shell integration.
 - `wt add --no-cd` disables `shell.cdAfterAdd` for one command.
-- `--cd` and `--json` are mutually exclusive; JSON output is for scripts and should not imply interactive shell mutation.
 
 Helpful failure when `--cd` is used without shell integration:
 
@@ -568,26 +546,6 @@ feature/payment-retry   /repo/.worktrees/feature/payment-retry    origin/main
 feature/webhook-audit   /repo/.worktrees/feature/webhook-audit    origin/main
 ```
 
-JSON output should be stable:
-
-```bash
-wt list --json
-```
-
-Example:
-
-```json
-[
-  {
-    "branch": "feature/payment-retry",
-    "path": "/repo/.worktrees/feature/payment-retry",
-    "head": "abc123",
-    "isMain": false,
-    "dirty": false
-  }
-]
-```
-
 ## Configuration
 
 ### Config file location
@@ -722,9 +680,9 @@ Required command support:
 | Area | Required support |
 | --- | --- |
 | root command | Bare `wt` contextual help/status with no side effects |
-| `add/new/create` | `--path`, `--worktrees-dir`, `--base`, `--fetch`, `--no-fetch`, `--copy-local`, `--copy-ignored`, `--copy-untracked`, `--overwrite`, `--skip-hooks`, `--cleanup-on-failure`, `--post-create`, `--cd`, `--no-cd`, `--json` |
-| `delete/rm` | Optional target inside linked worktree, branch/name/path target resolution, dirty checks, `--force`, `--delete-branch`, `--keep-branch`, `--pre-delete`, `--skip-hooks`, `--json` |
-| `list/ls` | Table output and JSON output |
+| `add/new/create` | `--path`, `--worktrees-dir`, `--base`, `--fetch`, `--no-fetch`, `--copy-local`, `--copy-ignored`, `--copy-untracked`, `--overwrite`, `--skip-hooks`, `--cleanup-on-failure`, `--post-create`, `--cd`, `--no-cd` |
+| `delete/rm` | Optional target inside linked worktree, branch/name/path target resolution, dirty checks, `--force`, `--delete-branch`, `--keep-branch`, `--pre-delete`, `--skip-hooks` |
+| `list/ls` | Table output |
 | `hooks` | `dir`, `init`, `path <hook>`, `edit <hook>` for repo-local hook scripts |
 | hooks | Repo config, CLI override, stable environment, non-zero exit handling |
 | config | Get/set repo defaults |
@@ -742,7 +700,6 @@ Required command support:
 - The final line of normal output is the worktree path.
 - The standalone binary does not change cwd.
 - `--cd` changes cwd only through shell integration.
-- JSON output follows a stable schema.
 
 ### Bare `wt` guarantees
 

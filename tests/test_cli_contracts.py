@@ -36,16 +36,6 @@ def test_cd_requires_shell_integration(tmp_path: Path, wt_env: dict[str, str]) -
     assert "--cd requires shell integration" in result.stderr
 
 
-def test_cd_and_json_are_mutually_exclusive(tmp_path: Path, wt_env: dict[str, str]) -> None:
-    repo = init_repo(tmp_path / "repo")
-    env = wt_env | {"WT_SHELL_INTEGRATION": "1"}
-
-    result = run_wt(["add", "feature/cd-json", "--base", "HEAD", "--cd", "--json"], cwd=repo, env=env)
-
-    assert result.returncode == 2
-    assert "--cd and --json are mutually exclusive" in result.stderr
-
-
 def test_shell_integration_allows_cd_request(tmp_path: Path, wt_env: dict[str, str]) -> None:
     repo = init_repo(tmp_path / "repo")
     destination = tmp_path / "threads" / "feature-cd"

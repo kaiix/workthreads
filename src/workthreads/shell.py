@@ -55,7 +55,7 @@ _wt_completion() {
     COMPREPLY=( $(compgen -W "$commands" -- "$cur") )
     return 0
   fi
-  COMPREPLY=( $(compgen -W "--path --worktrees-dir --base --fetch --no-fetch --copy-local --copy-ignored --copy-untracked --overwrite --skip-hooks --cleanup-on-failure --post-create --pre-delete --force --delete-branch --keep-branch --cd --no-cd --json" -- "$cur") )
+  COMPREPLY=( $(compgen -W "--path --worktrees-dir --base --fetch --no-fetch --copy-local --copy-ignored --copy-untracked --overwrite --skip-hooks --cleanup-on-failure --post-create --pre-delete --force --delete-branch --keep-branch --cd --no-cd" -- "$cur") )
 }
 complete -F _wt_completion wt
 '''
@@ -65,7 +65,7 @@ ZSH_COMPLETION = r'''#compdef wt
 _wt() {
   local -a commands flags shells
   commands=(add new create delete rm list ls config hooks completion init root current)
-  flags=(--path --worktrees-dir --base --fetch --no-fetch --copy-local --copy-ignored --copy-untracked --overwrite --skip-hooks --cleanup-on-failure --post-create --pre-delete --force --delete-branch --keep-branch --cd --no-cd --json)
+  flags=(--path --worktrees-dir --base --fetch --no-fetch --copy-local --copy-ignored --copy-untracked --overwrite --skip-hooks --cleanup-on-failure --post-create --pre-delete --force --delete-branch --keep-branch --cd --no-cd)
   shells=(bash zsh fish)
   if (( CURRENT == 2 )); then
     _describe 'command' commands
@@ -110,7 +110,6 @@ complete -c wt -l delete-branch
 complete -c wt -l keep-branch
 complete -c wt -l cd
 complete -c wt -l no-cd
-complete -c wt -l json
 '''
 
 
@@ -120,7 +119,6 @@ __wt_should_cd() {
   case "$1" in
     add|new|create)
       case " $* " in *" --no-cd "*) return 1;; esac
-      case " $* " in *" --json "*) return 1;; esac
       case " $* " in *" --cd "*) return 0;; esac
       [ "$("$__wt_bin" config get shell.cdAfterAdd 2>/dev/null)" = "true" ]
       ;;
@@ -156,7 +154,6 @@ __wt_should_cd() {
   case "$1" in
     add|new|create)
       case " $* " in *" --no-cd "*) return 1;; esac
-      case " $* " in *" --json "*) return 1;; esac
       case " $* " in *" --cd "*) return 0;; esac
       [ "$("$__wt_bin" config get shell.cdAfterAdd 2>/dev/null)" = "true" ]
       ;;
@@ -193,7 +190,6 @@ function __wt_should_cd
   switch $argv[1]
     case add new create
       contains -- --no-cd $argv; and return 1
-      contains -- --json $argv; and return 1
       contains -- --cd $argv; and return 0
       test "$($__wt_bin config get shell.cdAfterAdd 2>/dev/null)" = true
     case delete rm

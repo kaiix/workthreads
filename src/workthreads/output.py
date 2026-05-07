@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-import json
 import sys
 
 from .errors import WTError
@@ -31,10 +30,6 @@ def print_error(error: WTError) -> None:
         print_line(f"hint: {error.hint}", stderr=True)
     if error.details:
         print_line(error.details, stderr=True)
-
-
-def print_json(data: object) -> None:
-    print(json.dumps(data, indent=2, sort_keys=True))
 
 
 def print_home(repo_root: Path | None, current: str | None, default_path: str | None) -> None:

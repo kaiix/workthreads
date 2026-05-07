@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import errno
-import json
 import os
 import shlex
 import shutil
@@ -131,7 +130,6 @@ def build_parser() -> argparse.ArgumentParser:
         dest="cd",
         help="stay in place when shell.cdAfterAdd is true",
     )
-    add_parser.add_argument("--json", action="store_true", help="print stable JSON output")
 
     delete_parser = subparsers.add_parser("delete", aliases=["rm"], help="delete a linked worktree")
     delete_parser.add_argument("target", nargs="?")
@@ -141,10 +139,8 @@ def build_parser() -> argparse.ArgumentParser:
     branch_group.add_argument("--keep-branch", action="store_false", dest="delete_branch")
     delete_parser.add_argument("--pre-delete")
     delete_parser.add_argument("--skip-hooks", action="store_true")
-    delete_parser.add_argument("--json", action="store_true")
 
     list_parser = subparsers.add_parser("list", aliases=["ls"], help="list worktrees")
-    list_parser.add_argument("--json", action="store_true")
 
     config_parser = subparsers.add_parser("config", help="read and write configuration")
     config_subparsers = config_parser.add_subparsers(dest="config_action", required=True)
@@ -154,9 +150,7 @@ def build_parser() -> argparse.ArgumentParser:
     config_set.add_argument("key")
     config_set.add_argument("value")
     config_list = config_subparsers.add_parser("list")
-    config_list_output = config_list.add_mutually_exclusive_group()
-    config_list_output.add_argument("--plain", action="store_true", help="print key=value lines")
-    config_list_output.add_argument("--json", action="store_true", help="print values and descriptions as JSON")
+    config_list.add_argument("--plain", action="store_true", help="print key=value lines")
     config_unset = config_subparsers.add_parser("unset")
     config_unset.add_argument("key")
 
@@ -176,10 +170,8 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument("shell", choices=["bash", "zsh", "fish"])
 
     root_parser = subparsers.add_parser("root", help="print the main worktree root")
-    root_parser.add_argument("--json", action="store_true")
 
     current_parser = subparsers.add_parser("current", help="print the current worktree name")
-    current_parser.add_argument("--json", action="store_true")
 
     return parser
 
@@ -202,14 +194,11 @@ def default_path_pattern(config: config_module.Config) -> str | None:
 
 
 def handle_add(args: argparse.Namespace) -> int:
-    if args.cd and args.json:
-        raise UsageError("--cd and --json are mutually exclusive")
-
     repo = git.require_repo(Path.cwd())
     config = config_module.load_config(repo.main_root)
 
     shell_integration = os.environ.get("WT_SHELL_INTEGRATION") == "1"
-    config_cd = config.get_bool("shell.cdAfterAdd") if shell_integration and not args.json else False
+    config_cd = config.get_bool("shell.cdAfterAdd") if shell_integration else False
     cd_requested = args.cd is True or (args.cd is None and config_cd)
     if args.cd is True and not shell_integration:
         raise UsageError(
@@ -226,7 +215,6 @@ def handle_add(args: argparse.Namespace) -> int:
             path=existing.path,
             copied=copy_module.CopyCounts(),
             hook_result=hooks.HookResult(command=None, exit_code=None, skipped=True),
-            json_output=args.json,
             existing=True,
             cd_requested=cd_requested,
         )
@@ -334,7 +322,6 @@ def handle_add(args: argparse.Namespace) -> int:
         path=destination,
         copied=copied,
         hook_result=hook_result,
-        json_output=args.json,
         existing=False,
         cd_requested=cd_requested,
     )
@@ -376,30 +363,9 @@ def print_add_result(
     path: Path,
     copied: copy_module.CopyCounts,
     hook_result: hooks.HookResult,
-    json_output: bool,
     existing: bool,
     cd_requested: bool,
 ) -> None:
-    if json_output:
-        output.print_json(
-            {
-                "branch": branch,
-                "base": base,
-                "worktreePath": str(path),
-                "copied": {"ignored": copied.ignored, "untracked": copied.untracked},
-                "hooks": {
-                    "postCreate": {
-                        "command": hook_result.command,
-                        "exitCode": hook_result.exit_code,
-                        "skipped": hook_result.skipped,
-                    }
-                },
-                "existing": existing,
-                "cdRequested": cd_requested,
-            }
-        )
-        return
-
     if existing:
         output.print_line(f"existing worktree {branch}")
     else:
@@ -424,7 +390,7 @@ def handle_delete(args: argparse.Namespace) -> int:
     dirty = git.is_dirty(target.path)
     force_remove = args.force
     if dirty and not args.force:
-        if sys.stdin.isatty() and not args.json:
+        if sys.stdin.isatty():
             answer = input(f"worktree {target.path} has local changes; delete it? [y/N] ")
             if answer.lower() not in {"y", "yes"}:
                 raise SafetyError("delete cancelled")
@@ -467,25 +433,9 @@ def handle_delete(args: argparse.Namespace) -> int:
     deleting_current = target.path.resolve() == repo.current_root.resolve()
     write_cd_target(repo.main_root, deleting_current and os.environ.get("WT_SHELL_INTEGRATION") == "1")
 
-    if args.json:
-        output.print_json(
-            {
-                "branch": target.branch,
-                "path": str(target.path),
-                "branchState": branch_state,
-                "hooks": {
-                    "preDelete": {
-                        "command": hook_result.command,
-                        "exitCode": hook_result.exit_code,
-                        "skipped": hook_result.skipped,
-                    }
-                },
-            }
-        )
-    else:
-        output.print_line(f"deleted worktree {target.branch or target.name}")
-        output.print_line(f"path: {target.path}")
-        output.print_line(f"branch: {branch_state}")
+    output.print_line(f"deleted worktree {target.branch or target.name}")
+    output.print_line(f"path: {target.path}")
+    output.print_line(f"branch: {branch_state}")
     return int(ExitCode.SUCCESS)
 
 
@@ -577,10 +527,7 @@ def handle_list(args: argparse.Namespace) -> int:
             }
         )
 
-    if args.json:
-        output.print_json(rows)
-    else:
-        print_worktree_table(rows)
+    print_worktree_table(rows)
     return int(ExitCode.SUCCESS)
 
 
@@ -609,14 +556,7 @@ def handle_config(args: argparse.Namespace) -> int:
 
     if args.config_action == "list":
         rows = flatten_config(config.values)
-        if args.json:
-            output.print_json(
-                [
-                    {"key": key, "value": value, "description": CONFIG_DESCRIPTIONS.get(key, "")}
-                    for key, value in rows
-                ]
-            )
-        elif args.plain:
+        if args.plain:
             for key, value in rows:
                 output.print_line(f"{key}={format_config_value(value)}")
         else:
@@ -791,27 +731,14 @@ def format_config_display_value(value: object) -> str:
 
 def handle_root(args: argparse.Namespace) -> int:
     repo = git.require_repo(Path.cwd())
-    if args.json:
-        output.print_json({"root": str(repo.main_root)})
-    else:
-        output.print_line(str(repo.main_root))
+    output.print_line(str(repo.main_root))
     return int(ExitCode.SUCCESS)
 
 
 def handle_current(args: argparse.Namespace) -> int:
     repo = git.require_repo(Path.cwd())
     current = repo.current_worktree.branch or repo.current_worktree.name
-    if args.json:
-        output.print_json(
-            {
-                "branch": repo.current_worktree.branch,
-                "name": repo.current_worktree.name,
-                "path": str(repo.current_worktree.path),
-                "isMain": not repo.in_linked_worktree,
-            }
-        )
-    else:
-        output.print_line(current)
+    output.print_line(current)
     return int(ExitCode.SUCCESS)
 
 

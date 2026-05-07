@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-import json
 
 from conftest import init_repo, run_command, run_git, run_wt
 
@@ -45,12 +44,11 @@ def test_add_list_and_delete_worktree_with_copy_and_hooks(tmp_path: Path, wt_env
     assert (destination / "notes.txt").read_text(encoding="utf-8") == "scratch\n"
     assert (destination / "hook-event.txt").read_text(encoding="utf-8") == "post-create"
 
-    listed = run_wt(["list", "--json"], cwd=repo, env=wt_env)
+    listed = run_wt(["list"], cwd=repo, env=wt_env)
     assert listed.returncode == 0, listed.stderr
-    rows = json.loads(listed.stdout)
-    feature_row = next(row for row in rows if row["branch"] == "feature/demo")
-    assert feature_row["path"] == str(destination)
-    assert feature_row["base"] == "HEAD"
+    assert "feature/demo" in listed.stdout
+    assert str(destination) in listed.stdout
+    assert "HEAD" in listed.stdout
     assert not (repo / ".workthreads").exists()
 
     deleted = run_wt(["delete", "feature/demo", "--force", "--delete-branch"], cwd=repo, env=wt_env)
@@ -79,21 +77,6 @@ def test_delete_current_linked_worktree_without_target(tmp_path: Path, wt_env: d
     assert deleted.returncode == 0, deleted.stderr
     assert not destination.exists()
     assert cd_file.read_text(encoding="utf-8") == str(repo)
-
-
-def test_delete_json_output_is_valid_json(tmp_path: Path, wt_env: dict[str, str]) -> None:
-    repo = init_repo(tmp_path / "repo")
-    destination = tmp_path / "threads" / "json"
-
-    add = run_wt(["add", "feature/json", "--base", "HEAD", "--path", str(destination)], cwd=repo, env=wt_env)
-    assert add.returncode == 0, add.stderr
-
-    deleted = run_wt(["delete", "feature/json", "--force", "--delete-branch", "--json"], cwd=repo, env=wt_env)
-
-    assert deleted.returncode == 0, deleted.stderr
-    payload = json.loads(deleted.stdout)
-    assert payload["branch"] == "feature/json"
-    assert payload["branchState"] == "deleted"
 
 
 def test_add_uses_default_dot_worktrees_directory(tmp_path: Path, wt_env: dict[str, str]) -> None:
