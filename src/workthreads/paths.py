@@ -12,6 +12,13 @@ def branch_slug(branch: str) -> str:
     return slug or "worktree"
 
 
+def branch_path(branch: str) -> Path:
+    parts = [branch_slug(part) for part in branch.split("/") if part]
+    if not parts:
+        return Path("worktree")
+    return Path(*parts)
+
+
 def resolve_destination(
     *,
     repo_root: Path,
@@ -30,7 +37,7 @@ def resolve_destination(
     else:
         if not worktrees_dir:
             raise UsageError("missing worktrees directory", hint="set defaults.worktreesDir or pass --path")
-        destination = Path(worktrees_dir).expanduser() / branch_slug(branch)
+        destination = Path(worktrees_dir).expanduser() / branch_path(branch)
 
     if not destination.is_absolute():
         destination = repo_root / destination

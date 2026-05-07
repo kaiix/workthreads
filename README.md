@@ -57,12 +57,13 @@ eval "$(wt completion zsh)"
 Configure `wt` defaults for this repo:
 
 ```bash
-wt config set defaults.worktreesDir ../workthreads
 wt config set defaults.base origin/main
 wt config set defaults.copyLocal true
 ```
 
 Repo configuration is written to `wt.toml` at the repository root. It can stay untracked for local workflow settings, or be committed only when the repo intentionally wants shared defaults.
+
+By default, `wt add feature/payment-retry` creates `.worktrees/feature/payment-retry` under the repo root.
 
 Create a worktree:
 
@@ -75,7 +76,7 @@ Create one at an exact path and copy ignored/untracked local files:
 ```bash
 wt add feature/payment-retry \
   --base origin/main \
-  --path ../workthreads/payment-retry \
+  --path ../external-worktrees/payment-retry \
   --copy-local
 ```
 

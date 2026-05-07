@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 import os
-from pathlib import Path
 import shlex
 import shutil
-import sys
 import subprocess
+import sys
+from pathlib import Path
 from typing import Any
 
 from . import __version__
@@ -145,10 +146,18 @@ def build_parser() -> argparse.ArgumentParser:
 def handle_home() -> None:
     repo = git.try_repo(Path.cwd())
     if repo is None:
-        output.print_home(None, None)
+        output.print_home(None, None, None)
         return
+    config = config_module.load_config(repo.main_root)
     current = repo.current_worktree.branch or repo.current_worktree.name
-    output.print_home(repo.main_root, current)
+    output.print_home(repo.main_root, current, default_path_pattern(config))
+
+
+def default_path_pattern(config: config_module.Config) -> str | None:
+    worktrees_dir = config.get_str("defaults.worktreesDir")
+    if not worktrees_dir:
+        return None
+    return str(Path(worktrees_dir) / "<branch-path>")
 
 
 def handle_add(args: argparse.Namespace) -> int:
@@ -248,7 +257,7 @@ def handle_add(args: argparse.Namespace) -> int:
                     event="post-create",
                     repo_root=repo.main_root,
                     worktree_path=destination,
-                    worktree_name=paths.branch_slug(args.branch),
+                    worktree_name=destination.name,
                     branch=args.branch,
                     base=base,
                     copy_local=copy_local,
@@ -392,6 +401,7 @@ def handle_delete(args: argparse.Namespace) -> int:
         )
 
     git.remove_worktree(target.path, repo.main_root, force=force_remove)
+    cleanup_empty_worktree_parents(target.path, worktrees_root(repo.main_root, config))
     delete_branch = args.delete_branch if args.delete_branch is not None else config.get_bool("defaults.deleteBranch")
     branch_state = "kept"
     if delete_branch and target.branch:
@@ -420,6 +430,34 @@ def handle_delete(args: argparse.Namespace) -> int:
         output.print_line(f"path: {target.path}")
         output.print_line(f"branch: {branch_state}")
     return int(ExitCode.SUCCESS)
+
+
+def worktrees_root(repo_root: Path, config: config_module.Config) -> Path | None:
+    worktrees_dir = config.get_str("defaults.worktreesDir")
+    if not worktrees_dir:
+        return None
+    root = Path(worktrees_dir).expanduser()
+    if not root.is_absolute():
+        root = repo_root / root
+    return root.resolve()
+
+
+def cleanup_empty_worktree_parents(target_path: Path, root: Path | None) -> None:
+    if root is None:
+        return
+
+    current = target_path.resolve().parent
+    if not current.is_relative_to(root):
+        return
+
+    while current != root:
+        try:
+            current.rmdir()
+        except OSError as error:
+            if error.errno in {errno.ENOENT, errno.ENOTEMPTY, errno.EEXIST}:
+                return
+            raise
+        current = current.parent
 
 
 def resolve_delete_target(repo: git.RepoContext, target: str | None) -> git.Worktree:

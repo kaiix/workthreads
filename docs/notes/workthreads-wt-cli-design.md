@@ -56,12 +56,13 @@ These names are optimized for the workthreads workflow, not for matching any exi
 ### 1. Configure once
 
 ```bash
-wt config set defaults.worktreesDir ../workthreads
 wt config set defaults.base origin/main
 wt config set defaults.copyLocal true
 wt config set hooks.postCreate /absolute/path/to/post-create.sh
 wt config set hooks.preDelete /absolute/path/to/pre-delete.sh
 ```
+
+The built-in worktree location is `.worktrees/<branch-path>` under the repo root, so the first setup step does not need to configure a path.
 
 Shell integration, including completion:
 
@@ -98,7 +99,7 @@ With one-off overrides:
 ```bash
 wt add feature/payment-retry \
   --base origin/main \
-  --path ../workthreads/payment-retry \
+  --path ../external-worktrees/payment-retry \
   --fetch \
   --copy-local \
   --post-create ./scripts/bootstrap.sh
@@ -144,9 +145,10 @@ Running `wt` with no arguments is always side-effect free.
 Inside a git repository, interactive output should be a compact contextual home screen:
 
 ```text
-workthreads wt
+wt - git worktrees for parallel tasks
 repo: /repo
 current: main
+default path: .worktrees/<branch-path>
 
 Common commands:
   wt add <branch>       create a worktree
@@ -162,7 +164,7 @@ Setup commands:
 Outside a git repository, output should explain that worktree commands need a repo and show the common entry points:
 
 ```text
-workthreads wt
+wt - git worktrees for parallel tasks
 Run inside a git repository to manage worktrees.
 
 Common commands:
@@ -185,10 +187,10 @@ wt add feature/payment-retry
 wt add feature/payment-retry --base origin/main
 
 # Put the worktree at an exact path.
-wt add feature/payment-retry --path ../workthreads/payment-retry
+wt add feature/payment-retry --path ../external-worktrees/payment-retry
 
 # Put the worktree under a parent directory.
-wt add feature/payment-retry --worktrees-dir ../workthreads
+wt add feature/payment-retry --worktrees-dir ../external-worktrees
 
 # Bring ignored and untracked local files.
 wt add feature/payment-retry --copy-local
@@ -210,7 +212,7 @@ wt add feature/payment-retry --no-cd
 | 1. Read context | Resolve repo root, main worktree, existing worktrees, and local branches. | `[1/10] reading repository metadata` |
 | 2. Resolve branch | Use `<branch>` and validate the name. | `[2/10] resolving branch: feature/payment-retry` |
 | 3. Check conflicts | Ensure the branch/worktree does not conflict unless reuse is explicitly allowed. | `[3/10] checking existing branches and worktrees` |
-| 4. Resolve path | Use `--path`, or generate `<worktreesDir>/<branch>`. | `[4/10] resolving path: ../workthreads/payment-retry` |
+| 4. Resolve path | Use `--path`, or generate `<worktreesDir>/<branch-path>`. | `[4/10] resolving path: .worktrees/feature/payment-retry` |
 | 5. Resolve base | Use `--base`, repo config, global config, or a safe default. | `[5/10] resolving base: origin/main` |
 | 6. Fetch | If `--fetch` is set, fetch the matching remote. | `[6/10] fetching origin` |
 | 7. Count local files | Count ignored/untracked files requested by copy flags. | `[7/10] counting local files: ignored=12 untracked=3` |
@@ -224,10 +226,10 @@ Default output:
 
 ```text
 created worktree feature/payment-retry from origin/main
-path: /workthreads/payment-retry
+path: /repo/.worktrees/feature/payment-retry
 copied: ignored=12 untracked=3
 hook post-create: ok
-/workthreads/payment-retry
+/repo/.worktrees/feature/payment-retry
 ```
 
 The final line is only the worktree path. Without shell integration, this is the portable way to enter the new worktree:
@@ -241,7 +243,7 @@ JSON output:
 ```json
 {
   "repoRoot": "/repo",
-  "worktreePath": "/workthreads/payment-retry",
+  "worktreePath": "/repo/.worktrees/feature/payment-retry",
   "branch": "feature/payment-retry",
   "base": "origin/main",
   "copied": {
@@ -451,7 +453,7 @@ Hook environment:
 ```text
 WT_EVENT=post-create|pre-delete
 WT_REPO_ROOT=/repo
-WT_WORKTREE_PATH=/workthreads/payment-retry
+WT_WORKTREE_PATH=/repo/.worktrees/feature/payment-retry
 WT_WORKTREE_NAME=payment-retry
 WT_BRANCH=feature/payment-retry
 WT_BASE=origin/main
@@ -549,7 +551,7 @@ Success output:
 
 ```text
 deleted worktree feature/payment-retry
-path: /workthreads/payment-retry
+path: /repo/.worktrees/feature/payment-retry
 branch: kept
 ```
 
@@ -560,9 +562,9 @@ No separate `wt trash` command exists in this design. If deletion safety needs a
 Default output should be readable:
 
 ```text
-BRANCH                  PATH                              BASE
-feature/payment-retry   /workthreads/payment-retry        origin/main
-feature/webhook-audit   /workthreads/webhook-audit        origin/main
+BRANCH                  PATH                                      BASE
+feature/payment-retry   /repo/.worktrees/feature/payment-retry    origin/main
+feature/webhook-audit   /repo/.worktrees/feature/webhook-audit    origin/main
 ```
 
 JSON output should be stable:
@@ -577,7 +579,7 @@ Example:
 [
   {
     "branch": "feature/payment-retry",
-    "path": "/workthreads/payment-retry",
+    "path": "/repo/.worktrees/feature/payment-retry",
     "head": "abc123",
     "isMain": false,
     "dirty": false
@@ -620,7 +622,7 @@ Suggested local `wt.toml`:
 
 ```toml
 [defaults]
-worktreesDir = "../workthreads"
+worktreesDir = ".worktrees"
 base = "origin/main"
 fetch = true
 copyLocal = true
@@ -638,7 +640,7 @@ Config commands:
 
 ```bash
 wt config get defaults.worktreesDir
-wt config set defaults.worktreesDir ../workthreads
+wt config set defaults.worktreesDir ../external-worktrees
 wt config set defaults.base origin/main
 wt config set defaults.copyLocal true
 wt config set hooks.postCreate /absolute/path/to/post-create.sh

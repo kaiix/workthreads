@@ -12,7 +12,7 @@ REPO_CONFIG_FILENAME = "wt.toml"
 
 BUILTIN_CONFIG: dict[str, dict[str, object]] = {
     "defaults": {
-        "worktreesDir": "../workthreads",
+        "worktreesDir": ".worktrees",
         "base": None,
         "fetch": False,
         "copyLocal": False,

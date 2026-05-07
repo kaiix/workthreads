@@ -5,6 +5,15 @@ from pathlib import Path
 from conftest import init_repo, run_wt
 
 
+def test_builtin_worktrees_dir_defaults_to_dot_worktrees(tmp_path: Path, wt_env: dict[str, str]) -> None:
+    repo = init_repo(tmp_path / "repo")
+
+    get_result = run_wt(["config", "get", "defaults.worktreesDir"], cwd=repo, env=wt_env)
+
+    assert get_result.returncode == 0, get_result.stderr
+    assert get_result.stdout.strip() == ".worktrees"
+
+
 def test_config_set_get_and_list_repo_config(tmp_path: Path, wt_env: dict[str, str]) -> None:
     repo = init_repo(tmp_path / "repo")
 

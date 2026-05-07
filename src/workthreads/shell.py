@@ -30,7 +30,7 @@ def ensure_supported(shell: str) -> None:
         raise UsageError(f"unsupported shell: {shell}", hint=f"expected one of: {supported}")
 
 
-BASH_COMPLETION = r'''# workthreads wt bash completion
+BASH_COMPLETION = r'''# wt bash completion
 _wt_completion() {
   local cur prev commands
   COMPREPLY=()
@@ -87,7 +87,7 @@ fi
 '''
 
 
-FISH_COMPLETION = r'''# workthreads wt fish completion
+FISH_COMPLETION = r'''# wt fish completion
 complete -c wt -f -n "__fish_use_subcommand" -a "add new create delete rm list ls config hooks completion init root current"
 complete -c wt -f -n "__fish_seen_subcommand_from hooks" -a "dir init path edit"
 complete -c wt -f -n "__fish_seen_subcommand_from hooks; and contains -- (commandline -opc)[3] path edit" -a "post-create pre-delete"
@@ -114,7 +114,7 @@ complete -c wt -l json
 '''
 
 
-BASH_INIT = r'''# workthreads wt bash integration
+BASH_INIT = r'''# wt bash integration
 __wt_bin="${WT_BIN:-$(command -v wt)}"
 __wt_should_cd() {
   case " $* " in *" --no-cd "*) return 1;; esac
@@ -138,7 +138,7 @@ wt() {
 '''
 
 
-ZSH_INIT = r'''# workthreads wt zsh integration
+ZSH_INIT = r'''# wt zsh integration
 __wt_bin="${WT_BIN:-$(command -v wt)}"
 __wt_should_cd() {
   case " $* " in *" --no-cd "*) return 1;; esac
@@ -163,7 +163,7 @@ wt() {
 
 
 FISH_INIT = FISH_COMPLETION + r'''
-# workthreads wt fish integration
+# wt fish integration
 set -gx __wt_bin (command -v wt)
 function __wt_should_cd
   contains -- --no-cd $argv; and return 1

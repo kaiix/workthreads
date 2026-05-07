@@ -9,16 +9,18 @@ def test_bare_wt_outside_repo_is_contextual_help(tmp_path: Path, wt_env: dict[st
     result = run_wt([], cwd=tmp_path, env=wt_env)
 
     assert result.returncode == 0
-    assert "workthreads wt" in result.stdout
+    assert "wt - git worktrees for parallel tasks" in result.stdout
     assert "Run inside a git repository" in result.stdout
 
 
-def test_bare_wt_inside_repo_lists_setup_commands(tmp_path: Path, wt_env: dict[str, str]) -> None:
+def test_bare_wt_inside_repo_lists_default_path_and_setup_commands(tmp_path: Path, wt_env: dict[str, str]) -> None:
     repo = init_repo(tmp_path / "repo")
 
     result = run_wt([], cwd=repo, env=wt_env)
 
     assert result.returncode == 0
+    assert "wt - git worktrees for parallel tasks" in result.stdout
+    assert "default path: .worktrees/<branch-path>" in result.stdout
     assert "Setup commands:" in result.stdout
     assert "wt config set <key> <value>" in result.stdout
     assert "wt hooks init" in result.stdout

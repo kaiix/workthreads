@@ -37,8 +37,8 @@ def print_json(data: object) -> None:
     print(json.dumps(data, indent=2, sort_keys=True))
 
 
-def print_home(repo_root: Path | None, current: str | None) -> None:
-    print_line("workthreads wt")
+def print_home(repo_root: Path | None, current: str | None, default_path: str | None) -> None:
+    print_line("wt - git worktrees for parallel tasks")
     if repo_root is None:
         print_line("Run inside a git repository to manage worktrees.")
         print_line()
@@ -50,6 +50,8 @@ def print_home(repo_root: Path | None, current: str | None) -> None:
 
     print_line(f"repo: {repo_root}")
     print_line(f"current: {current or 'unknown'}")
+    if default_path:
+        print_line(f"default path: {default_path}")
     print_line()
     print_line("Common commands:")
     print_line("  wt add <branch>       create a worktree")

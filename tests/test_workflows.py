@@ -76,3 +76,35 @@ def test_delete_current_linked_worktree_without_target(tmp_path: Path, wt_env: d
 
     assert deleted.returncode == 0, deleted.stderr
     assert not destination.exists()
+
+
+def test_delete_json_output_is_valid_json(tmp_path: Path, wt_env: dict[str, str]) -> None:
+    repo = init_repo(tmp_path / "repo")
+    destination = tmp_path / "threads" / "json"
+
+    add = run_wt(["add", "feature/json", "--base", "HEAD", "--path", str(destination)], cwd=repo, env=wt_env)
+    assert add.returncode == 0, add.stderr
+
+    deleted = run_wt(["delete", "feature/json", "--force", "--delete-branch", "--json"], cwd=repo, env=wt_env)
+
+    assert deleted.returncode == 0, deleted.stderr
+    payload = json.loads(deleted.stdout)
+    assert payload["branch"] == "feature/json"
+    assert payload["branchState"] == "deleted"
+
+
+def test_add_uses_default_dot_worktrees_directory(tmp_path: Path, wt_env: dict[str, str]) -> None:
+    repo = init_repo(tmp_path / "repo")
+    destination = repo / ".worktrees" / "feature" / "default"
+
+    add = run_wt(["add", "feature/default", "--base", "HEAD"], cwd=repo, env=wt_env)
+
+    assert add.returncode == 0, add.stderr
+    assert add.stdout.splitlines()[-1] == str(destination)
+    assert destination.exists()
+
+    deleted = run_wt(["delete", "feature/default", "--force", "--delete-branch"], cwd=repo, env=wt_env)
+    assert deleted.returncode == 0, deleted.stderr
+    assert not destination.exists()
+    assert not (repo / ".worktrees" / "feature").exists()
+    assert (repo / ".worktrees").exists()
