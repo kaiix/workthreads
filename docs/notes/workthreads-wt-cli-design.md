@@ -692,6 +692,8 @@ eval "$(wt init zsh)"
 
 `wt init <shell>` should install completion and a small shell wrapper that delegates to the real binary. The wrapper is responsible for changing directories after a successful `wt add --cd` or when `shell.cdAfterAdd` is enabled.
 
+The wrapper should not pipe all `wt` output through `tee` or command substitution. Interactive commands such as `wt hooks edit` must keep direct access to the terminal. For cd handoff, the wrapper should pass a temporary `WT_CD_FILE`; `wt add` writes the target path there after success, and the wrapper reads it to `cd`.
+
 Target experience:
 
 - `wt add <tab>` completes branch/base candidates.

@@ -178,6 +178,7 @@ def handle_add(args: argparse.Namespace) -> int:
 
     existing = find_worktree_by_branch(repo.worktrees, args.branch)
     if existing:
+        write_cd_target(existing.path, cd_requested)
         print_add_result(
             branch=args.branch,
             base=None,
@@ -285,6 +286,7 @@ def handle_add(args: argparse.Namespace) -> int:
                 )
         raise
 
+    write_cd_target(destination, cd_requested)
     print_add_result(
         branch=args.branch,
         base=base,
@@ -296,6 +298,18 @@ def handle_add(args: argparse.Namespace) -> int:
         cd_requested=cd_requested,
     )
     return int(ExitCode.SUCCESS)
+
+
+def write_cd_target(path: Path, cd_requested: bool) -> None:
+    if not cd_requested:
+        return
+    cd_file = os.environ.get("WT_CD_FILE")
+    if not cd_file:
+        return
+    try:
+        Path(cd_file).write_text(str(path), encoding="utf-8")
+    except OSError as error:
+        raise WTError("failed to write shell cd target", details=str(error)) from error
 
 
 def cleanup_failed_add(repo_root: Path, destination: Path, branch: str, created: bool, branch_created: bool) -> None:

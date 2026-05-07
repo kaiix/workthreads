@@ -125,15 +125,18 @@ __wt_should_cd() {
 }
 wt() {
   local tmp wt_status last
-  tmp="$(mktemp)"
-  WT_SHELL_INTEGRATION=1 "$__wt_bin" "$@" | tee "$tmp"
-  wt_status="${PIPESTATUS[0]}"
-  if [ "$wt_status" -eq 0 ] && __wt_should_cd "$@"; then
-    last="$(tail -n 1 "$tmp")"
-    [ -d "$last" ] && cd "$last"
+  if __wt_should_cd "$@"; then
+    tmp="$(mktemp)"
+    WT_SHELL_INTEGRATION=1 WT_CD_FILE="$tmp" "$__wt_bin" "$@"
+    wt_status="$?"
+    if [ "$wt_status" -eq 0 ]; then
+      last="$(cat "$tmp")"
+      [ -d "$last" ] && cd "$last"
+    fi
+    rm -f "$tmp"
+    return "$wt_status"
   fi
-  rm -f "$tmp"
-  return "$wt_status"
+  WT_SHELL_INTEGRATION=1 "$__wt_bin" "$@"
 }
 '''
 
@@ -149,15 +152,18 @@ __wt_should_cd() {
 }
 wt() {
   local tmp wt_status last
-  tmp="$(mktemp)"
-  WT_SHELL_INTEGRATION=1 "$__wt_bin" "$@" | tee "$tmp"
-  wt_status="${pipestatus[1]}"
-  if [ "$wt_status" -eq 0 ] && __wt_should_cd "$@"; then
-    last="$(tail -n 1 "$tmp")"
-    [ -d "$last" ] && cd "$last"
+  if __wt_should_cd "$@"; then
+    tmp="$(mktemp)"
+    WT_SHELL_INTEGRATION=1 WT_CD_FILE="$tmp" "$__wt_bin" "$@"
+    wt_status="$?"
+    if [ "$wt_status" -eq 0 ]; then
+      last="$(cat "$tmp")"
+      [ -d "$last" ] && cd "$last"
+    fi
+    rm -f "$tmp"
+    return "$wt_status"
   fi
-  rm -f "$tmp"
-  return "$wt_status"
+  WT_SHELL_INTEGRATION=1 "$__wt_bin" "$@"
 }
 '''
 
@@ -173,14 +179,17 @@ function __wt_should_cd
   test "$($__wt_bin config get shell.cdAfterAdd 2>/dev/null)" = true
 end
 function wt
-  set -l tmp (mktemp)
-  env WT_SHELL_INTEGRATION=1 $__wt_bin $argv | tee $tmp
-  set -l wt_status $pipestatus[1]
-  if test "$wt_status" -eq 0; and __wt_should_cd $argv
-    set -l last (tail -n 1 $tmp)
-    test -d "$last"; and cd "$last"
+  if __wt_should_cd $argv
+    set -l tmp (mktemp)
+    env WT_SHELL_INTEGRATION=1 WT_CD_FILE="$tmp" $__wt_bin $argv
+    set -l wt_status $status
+    if test "$wt_status" -eq 0
+      set -l last (cat $tmp)
+      test -d "$last"; and cd "$last"
+    end
+    rm -f $tmp
+    return $wt_status
   end
-  rm -f $tmp
-  return $wt_status
+  env WT_SHELL_INTEGRATION=1 $__wt_bin $argv
 end
 '''

@@ -49,7 +49,8 @@ def test_cd_and_json_are_mutually_exclusive(tmp_path: Path, wt_env: dict[str, st
 def test_shell_integration_allows_cd_request(tmp_path: Path, wt_env: dict[str, str]) -> None:
     repo = init_repo(tmp_path / "repo")
     destination = tmp_path / "threads" / "feature-cd"
-    env = wt_env | {"WT_SHELL_INTEGRATION": "1"}
+    cd_file = tmp_path / "cd-target"
+    env = wt_env | {"WT_SHELL_INTEGRATION": "1", "WT_CD_FILE": str(cd_file)}
 
     result = run_wt(
         ["add", "feature/cd", "--base", "HEAD", "--path", str(destination), "--cd"],
@@ -59,6 +60,7 @@ def test_shell_integration_allows_cd_request(tmp_path: Path, wt_env: dict[str, s
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.splitlines()[-1] == str(destination)
+    assert cd_file.read_text(encoding="utf-8") == str(destination)
     assert destination.exists()
 
 
@@ -70,5 +72,7 @@ def test_completion_and_init_scripts_are_available(tmp_path: Path, wt_env: dict[
     assert "compdef _wt wt" in completion.stdout
     assert init.returncode == 0
     assert "WT_SHELL_INTEGRATION=1" in init.stdout
+    assert "WT_CD_FILE" in init.stdout
+    assert "| tee" not in init.stdout
     assert "wt_status" in init.stdout
     assert "local tmp status" not in init.stdout
