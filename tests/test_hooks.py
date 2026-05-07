@@ -6,12 +6,14 @@ import pytest
 
 from workthreads.errors import WTError
 from workthreads.hooks import hook_env, run_hook
+from conftest import init_repo
 
 
 def test_hook_env_contains_stable_values(tmp_path: Path) -> None:
+    repo = init_repo(tmp_path / "repo")
     env = hook_env(
         event="post-create",
-        repo_root=tmp_path / "repo",
+        repo_root=repo,
         worktree_path=tmp_path / "threads" / "feature-a",
         worktree_name="feature-a",
         branch="feature/a",
@@ -26,7 +28,7 @@ def test_hook_env_contains_stable_values(tmp_path: Path) -> None:
     assert env["WT_COPY_LOCAL"] == "1"
     assert env["WT_COPY_IGNORED"] == "1"
     assert env["WT_COPY_UNTRACKED"] == "1"
-    assert env["WT_CONFIG_FILE"].endswith("/repo/workthreads.toml")
+    assert env["WT_CONFIG_FILE"].endswith("/repo/wt.toml")
 
 
 def test_hook_failure_is_structured(tmp_path: Path) -> None:

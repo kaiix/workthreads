@@ -54,7 +54,7 @@ eval "$(wt completion zsh)"
 
 ## Basic usage
 
-Configure repo defaults:
+Configure `wt` defaults for this repo:
 
 ```bash
 wt config set defaults.worktreesDir ../workthreads
@@ -62,7 +62,7 @@ wt config set defaults.base origin/main
 wt config set defaults.copyLocal true
 ```
 
-Repo-local configuration is written to `workthreads.toml` at the repository root so it can be reviewed and committed with the project.
+Repo configuration is written to `wt.toml` at the repository root. It can stay untracked for local workflow settings, or be committed only when the repo intentionally wants shared defaults.
 
 Create a worktree:
 
@@ -109,11 +109,42 @@ wt delete feature/payment-retry
 Configure lifecycle hooks:
 
 ```bash
-wt config set hooks.postCreate ./scripts/wt-post-create.sh
-wt config set hooks.preDelete ./scripts/wt-pre-delete.sh
+wt hooks init
+wt hooks edit post-create
 ```
 
 Hooks receive stable `WT_*` environment variables such as `WT_EVENT`, `WT_REPO_ROOT`, `WT_WORKTREE_PATH`, `WT_BRANCH`, and `WT_BASE`.
+
+Recommended repo-local hook script layout:
+
+```text
+.git/
+  workthreads/
+    hooks/
+      post-create.sh
+      pre-delete.sh
+```
+
+Use `wt hooks dir` or `wt hooks path post-create` to inspect the generated paths.
+
+User-global hook scripts are also fine:
+
+```text
+~/.config/
+  workthreads/
+    hooks/
+      post-create.sh
+      pre-delete.sh
+```
+
+Shared hook scripts are possible, but should be intentional project policy rather than the default:
+
+```text
+scripts/
+  wt/
+    post-create.sh
+    pre-delete.sh
+```
 
 ## Development
 

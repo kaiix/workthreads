@@ -55,3 +55,8 @@ def print_home(repo_root: Path | None, current: str | None) -> None:
     print_line("  wt add <branch>       create a worktree")
     print_line("  wt delete [target]    delete current or named worktree")
     print_line("  wt list               list worktrees")
+    print_line()
+    print_line("Setup commands:")
+    print_line("  wt config set <key> <value>  configure repo defaults")
+    print_line("  wt hooks init                create local hook scripts")
+    print_line("  wt init <shell>              enable shell integration")

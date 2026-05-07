@@ -59,8 +59,8 @@ These names are optimized for the workthreads workflow, not for matching any exi
 wt config set defaults.worktreesDir ../workthreads
 wt config set defaults.base origin/main
 wt config set defaults.copyLocal true
-wt config set hooks.postCreate ./scripts/wt-post-create.sh
-wt config set hooks.preDelete ./scripts/wt-pre-delete.sh
+wt config set hooks.postCreate /absolute/path/to/post-create.sh
+wt config set hooks.preDelete /absolute/path/to/pre-delete.sh
 ```
 
 Shell integration, including completion:
@@ -131,6 +131,7 @@ wt delete feature/payment-retry
 | `wt delete [target]` | `wt rm [target]` | Delete a linked worktree. `target` is optional inside a linked worktree. |
 | `wt list` | `wt ls` | List worktrees. |
 | `wt config` | - | Read and write defaults. |
+| `wt hooks` | - | Manage repo-local hook scripts under git's common dir. |
 | `wt completion <shell>` | - | Print shell completion for bash, zsh, or fish. |
 | `wt init <shell>` | - | Print full shell integration for bash, zsh, or fish, including completion and `--cd` support. |
 | `wt root` | - | Print the main worktree or repo root. |
@@ -151,6 +152,11 @@ Common commands:
   wt add <branch>       create a worktree
   wt delete [target]    delete current or named worktree
   wt list               list worktrees
+
+Setup commands:
+  wt config set <key> <value>  configure repo defaults
+  wt hooks init                create local hook scripts
+  wt init <shell>              enable shell integration
 ```
 
 Outside a git repository, output should explain that worktree commands need a repo and show the common entry points:
@@ -335,12 +341,100 @@ First version hooks:
 Hook examples:
 
 ```bash
-wt config set hooks.postCreate ./scripts/wt-post-create.sh
-wt config set hooks.preDelete ./scripts/wt-pre-delete.sh
+wt config set hooks.postCreate /absolute/path/to/post-create.sh
+wt config set hooks.preDelete /absolute/path/to/pre-delete.sh
 
 wt add feature/foo --post-create ./scripts/bootstrap.sh
 wt delete feature/foo --pre-delete ./scripts/cleanup.sh
 ```
+
+### Hook script locations
+
+Hook scripts should be local by default. Each developer may use a different setup flow, different agents, different dependency managers, or no hooks at all.
+
+Recommended repo-local layout:
+
+```text
+$GIT_COMMON_DIR/
+  workthreads/
+    hooks/
+      post-create.sh
+      pre-delete.sh
+```
+
+For a normal single-worktree clone, this is usually:
+
+```text
+.git/
+  workthreads/
+    hooks/
+      post-create.sh
+      pre-delete.sh
+```
+
+Why this is the best repo-local default:
+
+- It is local to the clone and not committed.
+- It is shared by all linked worktrees because git worktrees share a common git directory.
+- It does not clutter the working tree.
+- It avoids `scripts/`, which conventionally means tracked project automation.
+- It avoids `.git/hooks`, which is reserved for Git's own hook mechanism and has different semantics.
+
+Recommended user-global layout:
+
+```text
+~/.config/
+  workthreads/
+    config.toml
+    hooks/
+      post-create.sh
+      pre-delete.sh
+```
+
+Why local hooks:
+
+- Creating a worktree is part of a developer-local workflow, not necessarily a project contract.
+- Developers may choose different worktree parent directories, bootstrap commands, package managers, editors, agents, and cleanup behavior.
+- Local hooks match the Supacode-style model where setup/archive/delete scripts are user settings.
+- Local hooks avoid surprising teammates who only want normal git worktree behavior.
+
+Where to configure hooks:
+
+- Use repo config for repo-specific local hooks.
+- Use global user config for hooks shared across repositories.
+- Use CLI flags for one-off hook commands.
+- Avoid committing hook settings in `wt.toml` unless the team explicitly wants a shared workflow contract.
+
+Repo-local hook config example:
+
+```bash
+wt hooks dir
+wt hooks init
+wt hooks edit post-create
+wt hooks path post-create
+```
+
+`wt hooks` helper commands create and manage scripts in the repo-local hook directory so users do not need to manually type git-common-dir paths.
+
+Optional shared hook scripts:
+
+```text
+scripts/
+  wt/
+    post-create.sh
+    pre-delete.sh
+```
+
+This is acceptable only when a repository intentionally wants shared hook behavior. It should not be the default recommendation.
+
+Hook path rules:
+
+- Relative hook paths are resolved from the worktree where the hook runs.
+- Repo-local untracked hook scripts should be configured through `wt hooks` helpers so the same setup works from every linked worktree.
+- `post-create` runs in the newly created worktree.
+- `pre-delete` runs in the target worktree before deletion.
+- Local hook scripts should usually use absolute paths or `~` paths.
+- Shared hook scripts must be tracked files available from the selected base ref.
 
 Hook execution rules:
 
@@ -365,7 +459,7 @@ WT_COPY_LOCAL=0|1
 WT_COPY_IGNORED=0|1
 WT_COPY_UNTRACKED=0|1
 WT_DIRTY=0|1
-WT_CONFIG_FILE=/repo/workthreads.toml
+WT_CONFIG_FILE=/repo/wt.toml
 ```
 
 ## Cleanup on Failure
@@ -493,17 +587,36 @@ Example:
 
 ## Configuration
 
-Repo-local config should live at the repository root:
+### Config file location
 
 ```text
-workthreads.toml
+wt.toml
 ```
 
-This is better than `.workthreads/config.toml` for the editable project configuration because it is easy to discover, review, and commit. Internal workthreads state should not live in the working tree; it belongs under git's common directory.
+Use `wt.toml` as the repo config file in v1. "Repo config" means the config is located at the repository root, not that it must be committed. A developer can keep `wt.toml` untracked for local workflow settings, or a repo can commit it when the team intentionally wants shared defaults.
 
-For migration, the CLI may read an existing `.workthreads/config.toml` as a legacy fallback when present, but new `wt config set` writes should target `workthreads.toml`.
+Current naming default:
 
-Suggested repo-local config:
+| Surface | Name | Reason |
+| --- | --- | --- |
+| Project/repo/package | `workthreads` | Names the product/workflow concept. |
+| CLI | `wt` | Short, high-frequency, and naturally maps to `git worktree`. |
+| Repo config | `wt.toml` | Polished and CLI-aligned without overloading Git's `worktree` terminology. |
+
+If committed, shared `wt.toml` should stay small. Good candidates:
+
+- Default base branch.
+- Whether fetching before creation is expected for this repo.
+- Naming/path conventions only if the team truly shares them.
+
+Usually keep these settings local/untracked:
+
+- Worktree parent directory.
+- Hook scripts.
+- Shell auto-cd preferences.
+- Copying local ignored/untracked files.
+
+Suggested local `wt.toml`:
 
 ```toml
 [defaults]
@@ -514,10 +627,8 @@ copyLocal = true
 deleteBranch = false
 
 [hooks]
-postCreate = "./scripts/wt-post-create.sh"
-preDelete = "./scripts/wt-pre-delete.sh"
-shell = "/bin/zsh"
-timeoutSeconds = 0
+postCreate = "/absolute/path/to/post-create.sh"
+preDelete = "/absolute/path/to/pre-delete.sh"
 
 [shell]
 cdAfterAdd = false
@@ -530,7 +641,7 @@ wt config get defaults.worktreesDir
 wt config set defaults.worktreesDir ../workthreads
 wt config set defaults.base origin/main
 wt config set defaults.copyLocal true
-wt config set hooks.postCreate ./scripts/wt-post-create.sh
+wt config set hooks.postCreate /absolute/path/to/post-create.sh
 wt config set shell.cdAfterAdd true
 wt config list
 wt config unset hooks.postCreate
@@ -609,6 +720,7 @@ Required command support:
 | `add/new/create` | `--path`, `--worktrees-dir`, `--base`, `--fetch`, `--no-fetch`, `--copy-local`, `--copy-ignored`, `--copy-untracked`, `--overwrite`, `--skip-hooks`, `--cleanup-on-failure`, `--post-create`, `--cd`, `--no-cd`, `--json` |
 | `delete/rm` | Optional target inside linked worktree, branch/name/path target resolution, dirty checks, `--force`, `--delete-branch`, `--keep-branch`, `--pre-delete`, `--skip-hooks`, `--json` |
 | `list/ls` | Table output and JSON output |
+| `hooks` | `dir`, `init`, `path <hook>`, `edit <hook>` for repo-local hook scripts |
 | hooks | Repo config, CLI override, stable environment, non-zero exit handling |
 | config | Get/set repo defaults |
 | shell | bash, zsh, fish completion; `wt init <shell>` wrapper support for `--cd` and `shell.cdAfterAdd` |

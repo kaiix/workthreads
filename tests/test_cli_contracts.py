@@ -13,6 +13,18 @@ def test_bare_wt_outside_repo_is_contextual_help(tmp_path: Path, wt_env: dict[st
     assert "Run inside a git repository" in result.stdout
 
 
+def test_bare_wt_inside_repo_lists_setup_commands(tmp_path: Path, wt_env: dict[str, str]) -> None:
+    repo = init_repo(tmp_path / "repo")
+
+    result = run_wt([], cwd=repo, env=wt_env)
+
+    assert result.returncode == 0
+    assert "Setup commands:" in result.stdout
+    assert "wt config set <key> <value>" in result.stdout
+    assert "wt hooks init" in result.stdout
+    assert "wt init <shell>" in result.stdout
+
+
 def test_cd_requires_shell_integration(tmp_path: Path, wt_env: dict[str, str]) -> None:
     repo = init_repo(tmp_path / "repo")
 

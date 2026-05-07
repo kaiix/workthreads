@@ -7,10 +7,7 @@ import os
 import tomllib
 
 from .errors import UsageError
-
-
-REPO_CONFIG_FILENAME = "workthreads.toml"
-LEGACY_REPO_CONFIG = Path(".workthreads") / "config.toml"
+REPO_CONFIG_FILENAME = "wt.toml"
 
 
 BUILTIN_CONFIG: dict[str, dict[str, object]] = {
@@ -71,10 +68,7 @@ def global_config_path() -> Path:
 
 def load_config(repo_root: Path | None = None) -> Config:
     values = deepcopy(BUILTIN_CONFIG)
-    repo_paths: tuple[Path | None, ...] = ()
-    if repo_root:
-        repo_paths = (legacy_repo_config_path(repo_root), repo_config_path(repo_root))
-    for path in (global_config_path(), *repo_paths):
+    for path in (global_config_path(), repo_config_path(repo_root) if repo_root else None):
         if path is None or not path.exists():
             continue
         merge_dict(values, read_toml(path))
@@ -83,10 +77,6 @@ def load_config(repo_root: Path | None = None) -> Config:
 
 def repo_config_path(repo_root: Path) -> Path:
     return repo_root / REPO_CONFIG_FILENAME
-
-
-def legacy_repo_config_path(repo_root: Path) -> Path:
-    return repo_root / LEGACY_REPO_CONFIG
 
 
 def read_toml(path: Path) -> dict[str, object]:

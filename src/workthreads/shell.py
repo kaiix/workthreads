@@ -36,10 +36,18 @@ _wt_completion() {
   COMPREPLY=()
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
-  commands="add new create delete rm list ls config completion init root current"
+  commands="add new create delete rm list ls config hooks completion init root current"
   case "$prev" in
     completion|init)
       COMPREPLY=( $(compgen -W "bash zsh fish" -- "$cur") )
+      return 0
+      ;;
+    hooks)
+      COMPREPLY=( $(compgen -W "dir init path edit" -- "$cur") )
+      return 0
+      ;;
+    path|edit)
+      COMPREPLY=( $(compgen -W "post-create pre-delete" -- "$cur") )
       return 0
       ;;
   esac
@@ -56,11 +64,17 @@ complete -F _wt_completion wt
 ZSH_COMPLETION = r'''#compdef wt
 _wt() {
   local -a commands flags shells
-  commands=(add new create delete rm list ls config completion init root current)
+  commands=(add new create delete rm list ls config hooks completion init root current)
   flags=(--path --worktrees-dir --base --fetch --no-fetch --copy-local --copy-ignored --copy-untracked --overwrite --skip-hooks --cleanup-on-failure --post-create --pre-delete --force --delete-branch --keep-branch --cd --no-cd --json)
   shells=(bash zsh fish)
   if (( CURRENT == 2 )); then
     _describe 'command' commands
+  elif [[ ${words[2]} == hooks && CURRENT == 3 ]]; then
+    local -a hook_commands=(dir init path edit)
+    _describe 'hook command' hook_commands
+  elif [[ ${words[2]} == hooks && (${words[3]} == path || ${words[3]} == edit) ]]; then
+    local -a hook_names=(post-create pre-delete)
+    _describe 'hook' hook_names
   elif [[ ${words[2]} == completion || ${words[2]} == init ]]; then
     _describe 'shell' shells
   else
@@ -74,7 +88,9 @@ fi
 
 
 FISH_COMPLETION = r'''# workthreads wt fish completion
-complete -c wt -f -n "__fish_use_subcommand" -a "add new create delete rm list ls config completion init root current"
+complete -c wt -f -n "__fish_use_subcommand" -a "add new create delete rm list ls config hooks completion init root current"
+complete -c wt -f -n "__fish_seen_subcommand_from hooks" -a "dir init path edit"
+complete -c wt -f -n "__fish_seen_subcommand_from hooks; and contains -- (commandline -opc)[3] path edit" -a "post-create pre-delete"
 complete -c wt -f -n "__fish_seen_subcommand_from completion init" -a "bash zsh fish"
 complete -c wt -l path -r
 complete -c wt -l worktrees-dir -r

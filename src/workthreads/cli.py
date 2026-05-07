@@ -4,8 +4,10 @@ import argparse
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import sys
+import subprocess
 from typing import Any
 
 from . import __version__
@@ -50,6 +52,8 @@ def run(argv: list[str]) -> int:
         return handle_list(namespace)
     if command == "config":
         return handle_config(namespace)
+    if command == "hooks":
+        return handle_hooks(namespace)
     if command == "completion":
         output.print_line(completion_script(namespace.shell))
         return int(ExitCode.SUCCESS)
@@ -113,6 +117,15 @@ def build_parser() -> argparse.ArgumentParser:
     config_subparsers.add_parser("list")
     config_unset = config_subparsers.add_parser("unset")
     config_unset.add_argument("key")
+
+    hooks_parser = subparsers.add_parser("hooks", help="manage repo-local wt hook scripts")
+    hooks_subparsers = hooks_parser.add_subparsers(dest="hooks_action", required=True)
+    hooks_subparsers.add_parser("dir", help="print the repo-local hook directory")
+    hooks_subparsers.add_parser("init", help="create local hook templates and configure them")
+    hooks_path = hooks_subparsers.add_parser("path", help="print a local hook script path")
+    hooks_path.add_argument("hook", choices=["post-create", "pre-delete"])
+    hooks_edit = hooks_subparsers.add_parser("edit", help="open a local hook script in $EDITOR")
+    hooks_edit.add_argument("hook", choices=["post-create", "pre-delete"])
 
     completion_parser = subparsers.add_parser("completion", help="print shell completion")
     completion_parser.add_argument("shell", choices=["bash", "zsh", "fish"])
@@ -518,6 +531,108 @@ def handle_config(args: argparse.Namespace) -> int:
         return int(ExitCode.SUCCESS)
 
     raise UsageError(f"unknown config action: {args.config_action}")
+
+
+HOOK_FILENAMES = {
+    "post-create": "post-create.sh",
+    "pre-delete": "pre-delete.sh",
+}
+
+
+HOOK_CONFIG_KEYS = {
+    "post-create": "hooks.postCreate",
+    "pre-delete": "hooks.preDelete",
+}
+
+
+def handle_hooks(args: argparse.Namespace) -> int:
+    repo = git.require_repo(Path.cwd())
+    hook_dir = repo_hook_dir(repo)
+
+    if args.hooks_action == "dir":
+        output.print_line(str(hook_dir))
+        return int(ExitCode.SUCCESS)
+
+    if args.hooks_action == "path":
+        output.print_line(str(hook_path(repo, args.hook)))
+        return int(ExitCode.SUCCESS)
+
+    if args.hooks_action == "init":
+        created = init_hook_templates(repo)
+        configure_hook_paths(repo)
+        output.print_line(f"hook dir: {hook_dir}")
+        for hook_name, path in created.items():
+            output.print_line(f"{hook_name}: {path}")
+        output.print_line(f"configured: {config_module.repo_config_path(repo.main_root)}")
+        return int(ExitCode.SUCCESS)
+
+    if args.hooks_action == "edit":
+        path = ensure_hook_template(repo, args.hook)
+        editor = os.environ.get("VISUAL") or os.environ.get("EDITOR")
+        if not editor:
+            output.print_line(str(path))
+            return int(ExitCode.SUCCESS)
+        result = subprocess.run([*shlex.split(editor), str(path)], check=False)
+        return int(result.returncode)
+
+    raise UsageError(f"unknown hooks action: {args.hooks_action}")
+
+
+def repo_hook_dir(repo: git.RepoContext) -> Path:
+    return git.common_dir(repo.main_root) / "workthreads" / "hooks"
+
+
+def hook_path(repo: git.RepoContext, hook_name: str) -> Path:
+    try:
+        filename = HOOK_FILENAMES[hook_name]
+    except KeyError as error:
+        raise UsageError(f"unknown hook: {hook_name}") from error
+    return repo_hook_dir(repo) / filename
+
+
+def init_hook_templates(repo: git.RepoContext) -> dict[str, Path]:
+    return {hook_name: ensure_hook_template(repo, hook_name) for hook_name in HOOK_FILENAMES}
+
+
+def ensure_hook_template(repo: git.RepoContext, hook_name: str) -> Path:
+    path = hook_path(repo, hook_name)
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(hook_template(hook_name), encoding="utf-8")
+        path.chmod(0o755)
+    return path
+
+
+def hook_template(hook_name: str) -> str:
+    if hook_name == "post-create":
+        return """#!/bin/sh
+set -eu
+
+# Runs inside the newly created worktree.
+# Use WT_WORKTREE_PATH, WT_REPO_ROOT, WT_BRANCH, and WT_BASE.
+:
+"""
+    if hook_name == "pre-delete":
+        return """#!/bin/sh
+set -eu
+
+# Runs inside the worktree before deletion.
+# Example: copy local agent artifacts back to the main worktree.
+# if [ -d "$WT_WORKTREE_PATH/.local" ]; then
+#   mkdir -p "$WT_REPO_ROOT/.local"
+#   rsync -a "$WT_WORKTREE_PATH/.local/" "$WT_REPO_ROOT/.local/"
+# fi
+:
+"""
+    raise UsageError(f"unknown hook: {hook_name}")
+
+
+def configure_hook_paths(repo: git.RepoContext) -> None:
+    path = config_module.writable_config_path(repo.main_root)
+    persisted = config_module.read_toml(path) if path.exists() else {}
+    for hook_name, key in HOOK_CONFIG_KEYS.items():
+        config_module.set_nested(persisted, key, str(hook_path(repo, hook_name)))
+    config_module.write_config_file(path, persisted)
 
 
 def flatten_config(values: dict[str, object], prefix: str = "") -> list[tuple[str, object]]:
