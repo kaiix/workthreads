@@ -25,5 +25,11 @@ def test_config_set_get_and_list_repo_config(tmp_path: Path, wt_env: dict[str, s
     assert get_result.stdout.strip() == "../threads"
 
     list_result = run_wt(["config", "list"], cwd=repo, env=wt_env)
-    assert "defaults.worktreesDir=../threads" in list_result.stdout
+    assert "defaults.worktreesDir" in list_result.stdout
+    assert "../threads" in list_result.stdout
+    assert "Parent directory for generated worktree paths." in list_result.stdout
+    assert "defaults.copyLocal" in list_result.stdout
+    assert "Copy ignored and untracked local files" in list_result.stdout
+    plain_result = run_wt(["config", "list", "--plain"], cwd=repo, env=wt_env)
+    assert "defaults.worktreesDir=../threads" in plain_result.stdout
     assert (repo / "wt.toml").exists()

@@ -117,11 +117,20 @@ complete -c wt -l json
 BASH_INIT = r'''# wt bash integration
 __wt_bin="${WT_BIN:-$(command -v wt)}"
 __wt_should_cd() {
-  case " $* " in *" --no-cd "*) return 1;; esac
-  case " $* " in *" --json "*) return 1;; esac
-  case "$1" in add|new|create) ;; *) return 1;; esac
-  case " $* " in *" --cd "*) return 0;; esac
-  [ "$("$__wt_bin" config get shell.cdAfterAdd 2>/dev/null)" = "true" ]
+  case "$1" in
+    add|new|create)
+      case " $* " in *" --no-cd "*) return 1;; esac
+      case " $* " in *" --json "*) return 1;; esac
+      case " $* " in *" --cd "*) return 0;; esac
+      [ "$("$__wt_bin" config get shell.cdAfterAdd 2>/dev/null)" = "true" ]
+      ;;
+    delete|rm)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 wt() {
   local tmp wt_status last
@@ -144,11 +153,20 @@ wt() {
 ZSH_INIT = r'''# wt zsh integration
 __wt_bin="${WT_BIN:-$(command -v wt)}"
 __wt_should_cd() {
-  case " $* " in *" --no-cd "*) return 1;; esac
-  case " $* " in *" --json "*) return 1;; esac
-  case "$1" in add|new|create) ;; *) return 1;; esac
-  case " $* " in *" --cd "*) return 0;; esac
-  [ "$("$__wt_bin" config get shell.cdAfterAdd 2>/dev/null)" = "true" ]
+  case "$1" in
+    add|new|create)
+      case " $* " in *" --no-cd "*) return 1;; esac
+      case " $* " in *" --json "*) return 1;; esac
+      case " $* " in *" --cd "*) return 0;; esac
+      [ "$("$__wt_bin" config get shell.cdAfterAdd 2>/dev/null)" = "true" ]
+      ;;
+    delete|rm)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 wt() {
   local tmp wt_status last
@@ -172,11 +190,17 @@ FISH_INIT = FISH_COMPLETION + r'''
 # wt fish integration
 set -gx __wt_bin (command -v wt)
 function __wt_should_cd
-  contains -- --no-cd $argv; and return 1
-  contains -- --json $argv; and return 1
-  contains -- $argv[1] add new create; or return 1
-  contains -- --cd $argv; and return 0
-  test "$($__wt_bin config get shell.cdAfterAdd 2>/dev/null)" = true
+  switch $argv[1]
+    case add new create
+      contains -- --no-cd $argv; and return 1
+      contains -- --json $argv; and return 1
+      contains -- --cd $argv; and return 0
+      test "$($__wt_bin config get shell.cdAfterAdd 2>/dev/null)" = true
+    case delete rm
+      return 0
+    case '*'
+      return 1
+  end
 end
 function wt
   if __wt_should_cd $argv

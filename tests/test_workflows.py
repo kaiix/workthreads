@@ -68,14 +68,17 @@ def test_add_list_and_delete_worktree_with_copy_and_hooks(tmp_path: Path, wt_env
 def test_delete_current_linked_worktree_without_target(tmp_path: Path, wt_env: dict[str, str]) -> None:
     repo = init_repo(tmp_path / "repo")
     destination = tmp_path / "threads" / "current"
+    cd_file = tmp_path / "cd-target"
+    env = wt_env | {"WT_SHELL_INTEGRATION": "1", "WT_CD_FILE": str(cd_file)}
 
     add = run_wt(["add", "feature/current", "--base", "HEAD", "--path", str(destination)], cwd=repo, env=wt_env)
     assert add.returncode == 0, add.stderr
 
-    deleted = run_wt(["delete", "--force"], cwd=destination, env=wt_env)
+    deleted = run_wt(["delete", "--force"], cwd=destination, env=env)
 
     assert deleted.returncode == 0, deleted.stderr
     assert not destination.exists()
+    assert cd_file.read_text(encoding="utf-8") == str(repo)
 
 
 def test_delete_json_output_is_valid_json(tmp_path: Path, wt_env: dict[str, str]) -> None:

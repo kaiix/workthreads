@@ -76,3 +76,13 @@ def test_completion_and_init_scripts_are_available(tmp_path: Path, wt_env: dict[
     assert "| tee" not in init.stdout
     assert "wt_status" in init.stdout
     assert "local tmp status" not in init.stdout
+
+
+def test_add_help_describes_important_flags(tmp_path: Path, wt_env: dict[str, str]) -> None:
+    result = run_wt(["add", "--help"], cwd=tmp_path, env=wt_env)
+
+    assert result.returncode == 0
+    assert "copy both ignored and untracked local files" in result.stdout
+    assert "defaults.copyLocal" in result.stdout
+    assert "defaults.fetch" in result.stdout
+    assert "remove a partially created worktree" in result.stdout

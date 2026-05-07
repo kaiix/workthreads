@@ -74,26 +74,64 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"wt {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    add_parser = subparsers.add_parser("add", aliases=["new", "create"], help="create a linked worktree")
-    add_parser.add_argument("branch")
+    add_parser = subparsers.add_parser(
+        "add",
+        aliases=["new", "create"],
+        help="create a linked worktree",
+        description="Create a linked worktree and branch.",
+    )
+    add_parser.add_argument("branch", help="branch name for the new worktree")
     destination = add_parser.add_mutually_exclusive_group()
-    destination.add_argument("--path")
-    destination.add_argument("--worktrees-dir")
-    add_parser.add_argument("--base")
+    destination.add_argument("--path", metavar="PATH", help="exact destination path for this worktree")
+    destination.add_argument(
+        "--worktrees-dir",
+        metavar="DIR",
+        help="parent directory for generated paths (config: defaults.worktreesDir)",
+    )
+    add_parser.add_argument("--base", metavar="REF", help="ref used to create the branch (config: defaults.base)")
     fetch = add_parser.add_mutually_exclusive_group()
-    fetch.add_argument("--fetch", action="store_true", default=None)
-    fetch.add_argument("--no-fetch", action="store_false", dest="fetch")
-    add_parser.add_argument("--copy-local", action="store_true")
-    add_parser.add_argument("--copy-ignored", action="store_true")
-    add_parser.add_argument("--copy-untracked", action="store_true")
-    add_parser.add_argument("--overwrite", action="store_true")
-    add_parser.add_argument("--skip-hooks", action="store_true")
-    add_parser.add_argument("--cleanup-on-failure", action="store_true")
-    add_parser.add_argument("--post-create")
+    fetch.add_argument(
+        "--fetch",
+        action="store_true",
+        default=None,
+        help="fetch the base remote before creation (config: defaults.fetch)",
+    )
+    fetch.add_argument(
+        "--no-fetch",
+        action="store_false",
+        dest="fetch",
+        help="do not fetch even when defaults.fetch is true",
+    )
+    add_parser.add_argument(
+        "--copy-local",
+        action="store_true",
+        help="copy both ignored and untracked local files (config: defaults.copyLocal)",
+    )
+    add_parser.add_argument("--copy-ignored", action="store_true", help="copy ignored files only")
+    add_parser.add_argument("--copy-untracked", action="store_true", help="copy untracked files only")
+    add_parser.add_argument("--overwrite", action="store_true", help="replace copied local files if they exist")
+    add_parser.add_argument("--skip-hooks", action="store_true", help="do not run lifecycle hooks")
+    add_parser.add_argument(
+        "--cleanup-on-failure",
+        action="store_true",
+        help="remove a partially created worktree if creation fails",
+    )
+    add_parser.add_argument("--post-create", metavar="CMD", help="one-off post-create hook command or script")
     cd_group = add_parser.add_mutually_exclusive_group()
-    cd_group.add_argument("--cd", action="store_true", dest="cd", default=None)
-    cd_group.add_argument("--no-cd", action="store_false", dest="cd")
-    add_parser.add_argument("--json", action="store_true")
+    cd_group.add_argument(
+        "--cd",
+        action="store_true",
+        dest="cd",
+        default=None,
+        help="enter the created worktree through shell integration",
+    )
+    cd_group.add_argument(
+        "--no-cd",
+        action="store_false",
+        dest="cd",
+        help="stay in place when shell.cdAfterAdd is true",
+    )
+    add_parser.add_argument("--json", action="store_true", help="print stable JSON output")
 
     delete_parser = subparsers.add_parser("delete", aliases=["rm"], help="delete a linked worktree")
     delete_parser.add_argument("target", nargs="?")
@@ -115,7 +153,10 @@ def build_parser() -> argparse.ArgumentParser:
     config_set = config_subparsers.add_parser("set")
     config_set.add_argument("key")
     config_set.add_argument("value")
-    config_subparsers.add_parser("list")
+    config_list = config_subparsers.add_parser("list")
+    config_list_output = config_list.add_mutually_exclusive_group()
+    config_list_output.add_argument("--plain", action="store_true", help="print key=value lines")
+    config_list_output.add_argument("--json", action="store_true", help="print values and descriptions as JSON")
     config_unset = config_subparsers.add_parser("unset")
     config_unset.add_argument("key")
 
@@ -423,6 +464,8 @@ def handle_delete(args: argparse.Namespace) -> int:
         branch_state = "deleted"
 
     metadata.remove_metadata(repo.main_root, target.path)
+    deleting_current = target.path.resolve() == repo.current_root.resolve()
+    write_cd_target(repo.main_root, deleting_current and os.environ.get("WT_SHELL_INTEGRATION") == "1")
 
     if args.json:
         output.print_json(
@@ -564,6 +607,22 @@ def handle_config(args: argparse.Namespace) -> int:
         output.print_line(format_config_value(value))
         return int(ExitCode.SUCCESS)
 
+    if args.config_action == "list":
+        rows = flatten_config(config.values)
+        if args.json:
+            output.print_json(
+                [
+                    {"key": key, "value": value, "description": CONFIG_DESCRIPTIONS.get(key, "")}
+                    for key, value in rows
+                ]
+            )
+        elif args.plain:
+            for key, value in rows:
+                output.print_line(f"{key}={format_config_value(value)}")
+        else:
+            print_config_table(rows)
+        return int(ExitCode.SUCCESS)
+
     path = config_module.writable_config_path(repo_root)
     persisted = config_module.read_toml(path) if path.exists() else {}
 
@@ -575,11 +634,6 @@ def handle_config(args: argparse.Namespace) -> int:
     if args.config_action == "unset":
         config_module.unset_nested(persisted, args.key)
         config_module.write_config_file(path, persisted)
-        return int(ExitCode.SUCCESS)
-
-    if args.config_action == "list":
-        for key, value in flatten_config(config.values):
-            output.print_line(f"{key}={format_config_value(value)}")
         return int(ExitCode.SUCCESS)
 
     raise UsageError(f"unknown config action: {args.config_action}")
@@ -594,6 +648,20 @@ HOOK_FILENAMES = {
 HOOK_CONFIG_KEYS = {
     "post-create": "hooks.postCreate",
     "pre-delete": "hooks.preDelete",
+}
+
+
+CONFIG_DESCRIPTIONS = {
+    "defaults.worktreesDir": "Parent directory for generated worktree paths.",
+    "defaults.base": "Ref used when --base is not provided.",
+    "defaults.fetch": "Fetch the base remote before creating a worktree.",
+    "defaults.copyLocal": "Copy ignored and untracked local files into new worktrees.",
+    "defaults.deleteBranch": "Delete the local branch when deleting a worktree.",
+    "hooks.postCreate": "Command or script run after creating a worktree.",
+    "hooks.preDelete": "Command or script run before deleting a worktree.",
+    "hooks.shell": "Shell used to run lifecycle hook commands.",
+    "hooks.timeoutSeconds": "Hook timeout in seconds. 0 means no timeout.",
+    "shell.cdAfterAdd": "Enter new worktrees automatically through shell integration.",
 }
 
 
@@ -698,12 +766,27 @@ def flatten_config(values: dict[str, object], prefix: str = "") -> list[tuple[st
     return rows
 
 
+def print_config_table(rows: list[tuple[str, object]]) -> None:
+    rendered = [(key, format_config_display_value(value), CONFIG_DESCRIPTIONS.get(key, "")) for key, value in rows]
+    key_width = max([len("KEY"), *(len(key) for key, _, _ in rendered)])
+    value_width = max([len("VALUE"), *(len(value) for _, value, _ in rendered)])
+
+    output.print_line(f"{'KEY':<{key_width}}  {'VALUE':<{value_width}}  DESCRIPTION")
+    for key, value, description in rendered:
+        output.print_line(f"{key:<{key_width}}  {value:<{value_width}}  {description}")
+
+
 def format_config_value(value: object) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
     if value is None:
         return ""
     return str(value)
+
+
+def format_config_display_value(value: object) -> str:
+    formatted = format_config_value(value)
+    return formatted if formatted else "-"
 
 
 def handle_root(args: argparse.Namespace) -> int:
