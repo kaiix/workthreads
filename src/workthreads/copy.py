@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import ctypes
+import errno
+import os
 import shutil
+import stat
+import sys
 
 from .errors import WTError
 from . import git
@@ -67,6 +72,74 @@ def copy_one(source: Path, destination: Path, *, overwrite: bool) -> None:
     if source.is_symlink():
         destination.symlink_to(source.readlink())
     elif source.is_dir():
-        shutil.copytree(source, destination, symlinks=True)
+        copy_tree(source, destination)
     else:
-        shutil.copy2(source, destination)
+        copy_file(source, destination)
+
+
+def copy_tree(source: Path, destination: Path) -> None:
+    destination.mkdir()
+    for child in source.iterdir():
+        copy_one(child, destination / child.name, overwrite=False)
+    shutil.copystat(source, destination, follow_symlinks=False)
+
+
+def copy_file(source: Path, destination: Path) -> None:
+    if try_clone_file(source, destination):
+        return
+    shutil.copy2(source, destination)
+
+
+def try_clone_file(source: Path, destination: Path) -> bool:
+    try:
+        if sys.platform == "darwin":
+            clone_file_darwin(source, destination)
+            return True
+        if sys.platform.startswith("linux"):
+            clone_file_linux(source, destination)
+            return True
+    except AttributeError:
+        remove_partial_clone(destination)
+    except OSError as error:
+        if error.errno != errno.EEXIST:
+            remove_partial_clone(destination)
+    return False
+
+
+def clone_file_darwin(source: Path, destination: Path) -> None:
+    libc = ctypes.CDLL("libc.dylib", use_errno=True)
+    clonefile = libc.clonefile
+    clonefile.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint32]
+    clonefile.restype = ctypes.c_int
+
+    result = clonefile(os.fsencode(source), os.fsencode(destination), 0)
+    if result != 0:
+        error_number = ctypes.get_errno()
+        raise OSError(error_number, os.strerror(error_number), str(destination))
+    shutil.copystat(source, destination, follow_symlinks=False)
+
+
+def clone_file_linux(source: Path, destination: Path) -> None:
+    import fcntl
+
+    ficlone = 0x40049409
+    mode = stat.S_IMODE(source.stat().st_mode)
+    with source.open("rb") as source_file:
+        destination_fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+        try:
+            fcntl.ioctl(destination_fd, ficlone, source_file.fileno())
+        finally:
+            os.close(destination_fd)
+    shutil.copystat(source, destination, follow_symlinks=False)
+
+
+def remove_partial_clone(destination: Path) -> None:
+    try:
+        destination.unlink()
+    except FileNotFoundError:
+        return
+    except IsADirectoryError:
+        return
+    except OSError as error:
+        if error.errno != errno.ENOENT:
+            raise

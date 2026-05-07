@@ -328,7 +328,8 @@ Implementation rules:
 - Never copy `.git/`.
 - Avoid copying nested worktrees.
 - Handle files, directories, and symlinks.
-- Prefer clone/reflink copy when available; fall back to normal copy.
+- Use copy-on-write clone/reflink for regular files when the platform and filesystem support it; fall back to normal copy.
+- Copy directories recursively so regular files inside directories can still use clone/reflink.
 - Do not overwrite existing destination files unless `--overwrite` is set.
 
 ## Lifecycle Hooks
