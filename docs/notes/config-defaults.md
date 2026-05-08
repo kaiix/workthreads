@@ -1,6 +1,10 @@
-# `wt` config defaults
+# wt config defaults
 
-This note is the design record for built-in `wt` defaults, the generated `wt config init` template, and the recommended local workflow. The main CLI design doc should link here instead of absorbing every defaults tradeoff.
+Status: active
+Surface: config
+Verified against: src/workthreads/config.py, tests/test_config.py
+
+This note is the design record for built-in `wt` defaults, the generated `wt config init` template, config file location, and the recommended local workflow. The CLI overview should link here instead of absorbing every defaults tradeoff.
 
 ## Current built-in defaults
 
@@ -69,3 +73,57 @@ Deferred safety improvements:
 - Avoid force-deleting branches by default unless the user has explicitly confirmed the unmerged-commit case.
 
 For now, the built-in default should remain `deleteBranch = false`.
+
+## Config file location
+
+Repo config lives at:
+
+```text
+wt.toml
+```
+
+"Repo config" means the config is located at the repository root, not that it must be committed. A developer can keep `wt.toml` untracked for local workflow settings, or a repo can commit it when the team intentionally wants shared defaults.
+
+Good candidates for committed shared config:
+
+- Default base branch.
+- Whether fetching before creation is expected for this repo.
+- Naming/path conventions only if the team truly shares them.
+
+Usually keep these settings local/untracked:
+
+- Worktree parent directory.
+- Hook scripts.
+- Shell auto-cd preferences.
+- Copying local ignored/untracked files.
+
+## Config commands
+
+```bash
+wt config init
+wt config init --global
+wt config path
+wt config path --global
+wt config edit
+wt config edit --global
+wt config list
+wt config list --plain
+```
+
+Direct key commands remain available for small updates and shell integration:
+
+```bash
+wt config get defaults.worktreesDir
+wt config set defaults.worktreesDir ../external-worktrees
+wt config set defaults.base origin/main
+wt config set defaults.copyLocal true
+wt config set hooks.postCreate /absolute/path/to/post-create.sh
+wt config set shell.cdAfterAdd true
+wt config unset hooks.postCreate
+```
+
+Precedence:
+
+```text
+CLI flag > repo config > global config > built-in default
+```
