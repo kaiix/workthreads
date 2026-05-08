@@ -33,3 +33,36 @@ def test_config_set_get_and_list_repo_config(tmp_path: Path, wt_env: dict[str, s
     plain_result = run_wt(["config", "list", "--plain"], cwd=repo, env=wt_env)
     assert "defaults.worktreesDir=../threads" in plain_result.stdout
     assert (repo / "wt.toml").exists()
+
+
+def test_config_init_path_and_edit_use_config_files(tmp_path: Path, wt_env: dict[str, str]) -> None:
+    repo = init_repo(tmp_path / "repo")
+    repo_config = repo / "wt.toml"
+    global_config = tmp_path / "xdg" / "workthreads" / "config.toml"
+
+    path_result = run_wt(["config", "path"], cwd=repo, env=wt_env)
+    assert path_result.returncode == 0
+    assert path_result.stdout.strip() == str(repo_config)
+
+    global_path_result = run_wt(["config", "path", "--global"], cwd=repo, env=wt_env)
+    assert global_path_result.returncode == 0
+    assert global_path_result.stdout.strip() == str(global_config)
+
+    init_result = run_wt(["config", "init"], cwd=repo, env=wt_env)
+    assert init_result.returncode == 0, init_result.stderr
+    assert f"created config: {repo_config}" in init_result.stdout
+    assert 'worktreesDir = ".worktrees"' in repo_config.read_text(encoding="utf-8")
+
+    second_init = run_wt(["config", "init"], cwd=repo, env=wt_env)
+    assert second_init.returncode == 0
+    assert f"config exists: {repo_config}" in second_init.stdout
+
+    repo_config.write_text("custom = true\n", encoding="utf-8")
+    force_init = run_wt(["config", "init", "--force"], cwd=repo, env=wt_env)
+    assert force_init.returncode == 0
+    assert "custom = true" not in repo_config.read_text(encoding="utf-8")
+
+    edit_result = run_wt(["config", "edit", "--global"], cwd=repo, env=wt_env)
+    assert edit_result.returncode == 0
+    assert edit_result.stdout.strip() == str(global_config)
+    assert global_config.exists()

@@ -22,9 +22,9 @@ def test_bare_wt_inside_repo_lists_default_path_and_setup_commands(tmp_path: Pat
     assert "wt - git worktrees for parallel tasks" in result.stdout
     assert "default path: .worktrees/<branch-path>" in result.stdout
     assert "Setup commands:" in result.stdout
-    assert "wt config set <key> <value>" in result.stdout
+    assert "wt config init" in result.stdout
     assert "wt hooks init" in result.stdout
-    assert "wt init <shell>" in result.stdout
+    assert "wt shell init <shell>" in result.stdout
 
 
 def test_cd_requires_shell_integration(tmp_path: Path, wt_env: dict[str, str]) -> None:
@@ -55,11 +55,12 @@ def test_shell_integration_allows_cd_request(tmp_path: Path, wt_env: dict[str, s
 
 
 def test_completion_and_init_scripts_are_available(tmp_path: Path, wt_env: dict[str, str]) -> None:
-    completion = run_wt(["completion", "zsh"], cwd=tmp_path, env=wt_env)
-    init = run_wt(["init", "bash"], cwd=tmp_path, env=wt_env)
+    completion = run_wt(["shell", "completion", "zsh"], cwd=tmp_path, env=wt_env)
+    init = run_wt(["shell", "init", "bash"], cwd=tmp_path, env=wt_env)
 
     assert completion.returncode == 0
     assert "compdef _wt wt" in completion.stdout
+    assert "shell root current" in completion.stdout
     assert init.returncode == 0
     assert "WT_SHELL_INTEGRATION=1" in init.stdout
     assert "WT_CD_FILE" in init.stdout

@@ -40,7 +40,7 @@ def print_home(repo_root: Path | None, current: str | None, default_path: str | 
         print_line("Common commands:")
         print_line("  wt add <branch>")
         print_line("  wt list")
-        print_line("  wt completion <shell>")
+        print_line("  wt shell completion <shell>")
         return
 
     print_line(f"repo: {repo_root}")
@@ -54,6 +54,6 @@ def print_home(repo_root: Path | None, current: str | None, default_path: str | 
     print_line("  wt list               list worktrees")
     print_line()
     print_line("Setup commands:")
-    print_line("  wt config set <key> <value>  configure repo defaults")
-    print_line("  wt hooks init                create local hook scripts")
-    print_line("  wt init <shell>              enable shell integration")
+    print_line("  wt config init        create a commented wt.toml")
+    print_line("  wt hooks init         create local hook scripts")
+    print_line("  wt shell init <shell> enable shell integration")

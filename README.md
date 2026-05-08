@@ -41,15 +41,15 @@ wt --help
 Full shell integration includes completion and `wt add --cd` support:
 
 ```bash
-eval "$(wt init zsh)"   # zsh
-eval "$(wt init bash)"  # bash
-eval "$(wt init fish)"  # fish
+eval "$(wt shell init zsh)"   # zsh
+eval "$(wt shell init bash)"  # bash
+wt shell init fish | source   # fish
 ```
 
 Completion only:
 
 ```bash
-eval "$(wt completion zsh)"
+eval "$(wt shell completion zsh)"
 ```
 
 ## Basic usage
@@ -57,11 +57,11 @@ eval "$(wt completion zsh)"
 Configure `wt` defaults for this repo:
 
 ```bash
-wt config set defaults.base origin/main
-wt config set defaults.copyLocal true
+wt config init
+wt config edit
 ```
 
-Repo configuration is written to `wt.toml` at the repository root. It can stay untracked for local workflow settings, or be committed only when the repo intentionally wants shared defaults.
+Repo configuration lives in `wt.toml` at the repository root. It can stay untracked for local workflow settings, or be committed only when the repo intentionally wants shared defaults. Use `wt config path` to print the active path.
 
 By default, `wt add feature/payment-retry` creates `.worktrees/feature/payment-retry` under the repo root.
 
@@ -158,5 +158,5 @@ Run a quick CLI smoke check:
 
 ```bash
 uv run wt
-uv run wt completion zsh
+uv run wt shell completion zsh
 ```

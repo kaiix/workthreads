@@ -54,12 +54,8 @@ def run(argv: list[str]) -> int:
         return handle_config(namespace)
     if command == "hooks":
         return handle_hooks(namespace)
-    if command == "completion":
-        output.print_line(completion_script(namespace.shell))
-        return int(ExitCode.SUCCESS)
-    if command == "init":
-        output.print_line(init_script(namespace.shell))
-        return int(ExitCode.SUCCESS)
+    if command == "shell":
+        return handle_shell(namespace)
     if command == "root":
         return handle_root(namespace)
     if command == "current":
@@ -142,16 +138,23 @@ def build_parser() -> argparse.ArgumentParser:
 
     list_parser = subparsers.add_parser("list", aliases=["ls"], help="list worktrees")
 
-    config_parser = subparsers.add_parser("config", help="read and write configuration")
+    config_parser = subparsers.add_parser("config", help="manage configuration files and values")
     config_subparsers = config_parser.add_subparsers(dest="config_action", required=True)
-    config_get = config_subparsers.add_parser("get")
+    config_get = config_subparsers.add_parser("get", help="print one resolved config value")
     config_get.add_argument("key")
-    config_set = config_subparsers.add_parser("set")
+    config_set = config_subparsers.add_parser("set", help="set one value in the writable config file")
     config_set.add_argument("key")
     config_set.add_argument("value")
-    config_list = config_subparsers.add_parser("list")
+    config_list = config_subparsers.add_parser("list", help="list resolved config values")
     config_list.add_argument("--plain", action="store_true", help="print key=value lines")
-    config_unset = config_subparsers.add_parser("unset")
+    config_init = config_subparsers.add_parser("init", help="create a commented config file")
+    add_config_scope_flag(config_init)
+    config_init.add_argument("--force", action="store_true", help="replace an existing config file")
+    config_path = config_subparsers.add_parser("path", help="print the config file path")
+    add_config_scope_flag(config_path)
+    config_edit = config_subparsers.add_parser("edit", help="open the config file in $EDITOR")
+    add_config_scope_flag(config_edit)
+    config_unset = config_subparsers.add_parser("unset", help="remove one value from the writable config file")
     config_unset.add_argument("key")
 
     hooks_parser = subparsers.add_parser("hooks", help="manage repo-local wt hook scripts")
@@ -163,17 +166,27 @@ def build_parser() -> argparse.ArgumentParser:
     hooks_edit = hooks_subparsers.add_parser("edit", help="open a local hook script in $EDITOR")
     hooks_edit.add_argument("hook", choices=["post-create", "pre-delete"])
 
-    completion_parser = subparsers.add_parser("completion", help="print shell completion")
-    completion_parser.add_argument("shell", choices=["bash", "zsh", "fish"])
-
-    init_parser = subparsers.add_parser("init", help="print full shell integration")
-    init_parser.add_argument("shell", choices=["bash", "zsh", "fish"])
+    shell_parser = subparsers.add_parser("shell", help="print shell setup scripts")
+    shell_subparsers = shell_parser.add_subparsers(dest="shell_action", required=True)
+    shell_init = shell_subparsers.add_parser("init", help="print full shell integration")
+    shell_init.add_argument("shell", choices=["bash", "zsh", "fish"])
+    shell_completion = shell_subparsers.add_parser("completion", help="print shell completion")
+    shell_completion.add_argument("shell", choices=["bash", "zsh", "fish"])
 
     root_parser = subparsers.add_parser("root", help="print the main worktree root")
 
     current_parser = subparsers.add_parser("current", help="print the current worktree name")
 
     return parser
+
+
+def add_config_scope_flag(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--global",
+        action="store_true",
+        dest="use_global",
+        help="use the global config file instead of repo wt.toml",
+    )
 
 
 def handle_home() -> None:
@@ -203,7 +216,7 @@ def handle_add(args: argparse.Namespace) -> int:
     if args.cd is True and not shell_integration:
         raise UsageError(
             "--cd requires shell integration",
-            hint='run `eval "$(wt init zsh)"` or use `cd "$(wt add <branch> | tail -n 1)"`',
+            hint='run `eval "$(wt shell init zsh)"` or use `cd "$(wt add <branch> | tail -n 1)"`',
         )
 
     existing = find_worktree_by_branch(repo.worktrees, args.branch)
@@ -563,6 +576,30 @@ def handle_config(args: argparse.Namespace) -> int:
             print_config_table(rows)
         return int(ExitCode.SUCCESS)
 
+    if args.config_action == "path":
+        output.print_line(str(config_command_path(repo_root, args.use_global)))
+        return int(ExitCode.SUCCESS)
+
+    if args.config_action == "init":
+        path = config_command_path(repo_root, args.use_global)
+        if path.exists() and not args.force:
+            output.print_line(f"config exists: {path}")
+        else:
+            config_module.write_default_config_file(path)
+            output.print_line(f"created config: {path}")
+        return int(ExitCode.SUCCESS)
+
+    if args.config_action == "edit":
+        path = config_command_path(repo_root, args.use_global)
+        if not path.exists():
+            config_module.write_default_config_file(path)
+        editor = os.environ.get("VISUAL") or os.environ.get("EDITOR")
+        if not editor:
+            output.print_line(str(path))
+            return int(ExitCode.SUCCESS)
+        result = subprocess.run([*shlex.split(editor), str(path)], check=False)
+        return int(result.returncode)
+
     path = config_module.writable_config_path(repo_root)
     persisted = config_module.read_toml(path) if path.exists() else {}
 
@@ -577,6 +614,12 @@ def handle_config(args: argparse.Namespace) -> int:
         return int(ExitCode.SUCCESS)
 
     raise UsageError(f"unknown config action: {args.config_action}")
+
+
+def config_command_path(repo_root: Path | None, use_global: bool) -> Path:
+    if use_global or repo_root is None:
+        return config_module.global_config_path()
+    return config_module.repo_config_path(repo_root)
 
 
 HOOK_FILENAMES = {
@@ -636,6 +679,16 @@ def handle_hooks(args: argparse.Namespace) -> int:
         return int(result.returncode)
 
     raise UsageError(f"unknown hooks action: {args.hooks_action}")
+
+
+def handle_shell(args: argparse.Namespace) -> int:
+    if args.shell_action == "completion":
+        output.print_line(completion_script(args.shell))
+        return int(ExitCode.SUCCESS)
+    if args.shell_action == "init":
+        output.print_line(init_script(args.shell))
+        return int(ExitCode.SUCCESS)
+    raise UsageError(f"unknown shell action: {args.shell_action}")
 
 
 def repo_hook_dir(repo: git.RepoContext) -> Path:

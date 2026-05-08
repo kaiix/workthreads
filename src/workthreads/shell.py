@@ -32,30 +32,54 @@ def ensure_supported(shell: str) -> None:
 
 BASH_COMPLETION = r'''# wt bash completion
 _wt_completion() {
-  local cur prev commands
+  local cur cmd subcmd commands flags
   COMPREPLY=()
   cur="${COMP_WORDS[COMP_CWORD]}"
-  prev="${COMP_WORDS[COMP_CWORD-1]}"
-  commands="add new create delete rm list ls config hooks completion init root current"
-  case "$prev" in
-    completion|init)
-      COMPREPLY=( $(compgen -W "bash zsh fish" -- "$cur") )
-      return 0
-      ;;
-    hooks)
-      COMPREPLY=( $(compgen -W "dir init path edit" -- "$cur") )
-      return 0
-      ;;
-    path|edit)
-      COMPREPLY=( $(compgen -W "post-create pre-delete" -- "$cur") )
-      return 0
-      ;;
-  esac
+  cmd="${COMP_WORDS[1]}"
+  subcmd="${COMP_WORDS[2]}"
+  commands="add new create delete rm list ls config hooks shell root current"
+  flags="--path --worktrees-dir --base --fetch --no-fetch --copy-local --copy-ignored --copy-untracked --overwrite --skip-hooks --cleanup-on-failure --post-create --pre-delete --force --delete-branch --keep-branch --cd --no-cd"
   if [[ "$COMP_CWORD" == 1 ]]; then
     COMPREPLY=( $(compgen -W "$commands" -- "$cur") )
     return 0
   fi
-  COMPREPLY=( $(compgen -W "--path --worktrees-dir --base --fetch --no-fetch --copy-local --copy-ignored --copy-untracked --overwrite --skip-hooks --cleanup-on-failure --post-create --pre-delete --force --delete-branch --keep-branch --cd --no-cd" -- "$cur") )
+  case "$cmd" in
+    shell)
+      if [[ "$COMP_CWORD" == 2 ]]; then
+        COMPREPLY=( $(compgen -W "init completion" -- "$cur") )
+        return 0
+      fi
+      if [[ "$subcmd" == "init" || "$subcmd" == "completion" ]]; then
+        COMPREPLY=( $(compgen -W "bash zsh fish" -- "$cur") )
+        return 0
+      fi
+      ;;
+    hooks)
+      if [[ "$COMP_CWORD" == 2 ]]; then
+        COMPREPLY=( $(compgen -W "dir init path edit" -- "$cur") )
+        return 0
+      fi
+      if [[ "$subcmd" == "path" || "$subcmd" == "edit" ]]; then
+        COMPREPLY=( $(compgen -W "post-create pre-delete" -- "$cur") )
+        return 0
+      fi
+      ;;
+    config)
+      if [[ "$COMP_CWORD" == 2 ]]; then
+        COMPREPLY=( $(compgen -W "init path edit list get set unset" -- "$cur") )
+        return 0
+      fi
+      if [[ "$subcmd" == "init" ]]; then
+        COMPREPLY=( $(compgen -W "--global --force" -- "$cur") )
+        return 0
+      fi
+      if [[ "$subcmd" == "path" || "$subcmd" == "edit" ]]; then
+        COMPREPLY=( $(compgen -W "--global" -- "$cur") )
+        return 0
+      fi
+      ;;
+  esac
+  COMPREPLY=( $(compgen -W "$flags" -- "$cur") )
 }
 complete -F _wt_completion wt
 '''
@@ -64,19 +88,31 @@ complete -F _wt_completion wt
 ZSH_COMPLETION = r'''#compdef wt
 _wt() {
   local -a commands flags shells
-  commands=(add new create delete rm list ls config hooks completion init root current)
+  commands=(add new create delete rm list ls config hooks shell root current)
   flags=(--path --worktrees-dir --base --fetch --no-fetch --copy-local --copy-ignored --copy-untracked --overwrite --skip-hooks --cleanup-on-failure --post-create --pre-delete --force --delete-branch --keep-branch --cd --no-cd)
   shells=(bash zsh fish)
   if (( CURRENT == 2 )); then
     _describe 'command' commands
+  elif [[ ${words[2]} == shell ]] && (( CURRENT == 3 )); then
+    local -a shell_commands=(init completion)
+    _describe 'shell command' shell_commands
+  elif [[ ${words[2]} == shell && (${words[3]} == init || ${words[3]} == completion) ]]; then
+    _describe 'shell' shells
+  elif [[ ${words[2]} == config ]] && (( CURRENT == 3 )); then
+    local -a config_commands=(init path edit list get set unset)
+    _describe 'config command' config_commands
+  elif [[ ${words[2]} == config && ${words[3]} == init ]]; then
+    local -a config_init_flags=(--global --force)
+    _describe 'flag' config_init_flags
+  elif [[ ${words[2]} == config && (${words[3]} == path || ${words[3]} == edit) ]]; then
+    local -a config_scope_flags=(--global)
+    _describe 'flag' config_scope_flags
   elif [[ ${words[2]} == hooks && CURRENT == 3 ]]; then
     local -a hook_commands=(dir init path edit)
     _describe 'hook command' hook_commands
   elif [[ ${words[2]} == hooks && (${words[3]} == path || ${words[3]} == edit) ]]; then
     local -a hook_names=(post-create pre-delete)
     _describe 'hook' hook_names
-  elif [[ ${words[2]} == completion || ${words[2]} == init ]]; then
-    _describe 'shell' shells
   else
     _describe 'flag' flags
   fi
@@ -88,10 +124,14 @@ fi
 
 
 FISH_COMPLETION = r'''# wt fish completion
-complete -c wt -f -n "__fish_use_subcommand" -a "add new create delete rm list ls config hooks completion init root current"
+complete -c wt -f -n "__fish_use_subcommand" -a "add new create delete rm list ls config hooks shell root current"
+complete -c wt -f -n "__fish_seen_subcommand_from shell" -a "init completion"
+complete -c wt -f -n "__fish_seen_subcommand_from shell; and contains -- (commandline -opc)[3] init completion" -a "bash zsh fish"
+complete -c wt -f -n "__fish_seen_subcommand_from config" -a "init path edit list get set unset"
+complete -c wt -f -n "__fish_seen_subcommand_from config; and contains -- (commandline -opc)[3] init" -a "--global --force"
+complete -c wt -f -n "__fish_seen_subcommand_from config; and contains -- (commandline -opc)[3] path edit" -a "--global"
 complete -c wt -f -n "__fish_seen_subcommand_from hooks" -a "dir init path edit"
 complete -c wt -f -n "__fish_seen_subcommand_from hooks; and contains -- (commandline -opc)[3] path edit" -a "post-create pre-delete"
-complete -c wt -f -n "__fish_seen_subcommand_from completion init" -a "bash zsh fish"
 complete -c wt -l path -r
 complete -c wt -l worktrees-dir -r
 complete -c wt -l base -r

@@ -56,10 +56,20 @@ These names are optimized for the workthreads workflow, not for matching any exi
 ### 1. Configure once
 
 ```bash
-wt config set defaults.base origin/main
-wt config set defaults.copyLocal true
-wt config set hooks.postCreate /absolute/path/to/post-create.sh
-wt config set hooks.preDelete /absolute/path/to/pre-delete.sh
+wt config init
+wt config edit
+```
+
+`wt config init` creates a commented `wt.toml` in the repo root. Edit only the defaults the repo or developer actually needs:
+
+```toml
+[defaults]
+base = "origin/main"
+copyLocal = true
+
+[hooks]
+postCreate = "/absolute/path/to/post-create.sh"
+preDelete = "/absolute/path/to/pre-delete.sh"
 ```
 
 The built-in worktree location is `.worktrees/<branch-path>` under the repo root, so the first setup step does not need to configure a path.
@@ -67,19 +77,21 @@ The built-in worktree location is `.worktrees/<branch-path>` under the repo root
 Shell integration, including completion:
 
 ```bash
-eval "$(wt init zsh)"
+eval "$(wt shell init zsh)"
 ```
 
 Completion-only setup is also available:
 
 ```bash
-eval "$(wt completion zsh)"
+eval "$(wt shell completion zsh)"
 ```
 
 Optional auto-cd for interactive shells:
 
-```bash
-wt config set shell.cdAfterAdd true
+```toml
+# In wt.toml:
+[shell]
+cdAfterAdd = true
 ```
 
 ### 2. Start a new work thread
@@ -131,10 +143,10 @@ wt delete feature/payment-retry
 | `wt add <branch>` | `wt new <branch>`, `wt create <branch>` | Create a new linked worktree and branch. |
 | `wt delete [target]` | `wt rm [target]` | Delete a linked worktree. `target` is optional inside a linked worktree. |
 | `wt list` | `wt ls` | List worktrees. |
-| `wt config` | - | Read and write defaults. |
+| `wt config` | - | Create, edit, inspect, and update configuration. |
 | `wt hooks` | - | Manage repo-local hook scripts under git's common dir. |
-| `wt completion <shell>` | - | Print shell completion for bash, zsh, or fish. |
-| `wt init <shell>` | - | Print full shell integration for bash, zsh, or fish, including completion and `--cd` support. |
+| `wt shell completion <shell>` | - | Print shell completion for bash, zsh, or fish. |
+| `wt shell init <shell>` | - | Print full shell integration for bash, zsh, or fish, including completion and `--cd` support. |
 | `wt root` | - | Print the main worktree or repo root. |
 | `wt current` | - | Print the current linked worktree branch/name. |
 
@@ -156,9 +168,9 @@ Common commands:
   wt list               list worktrees
 
 Setup commands:
-  wt config set <key> <value>  configure repo defaults
-  wt hooks init                create local hook scripts
-  wt init <shell>              enable shell integration
+  wt config init        create a commented wt.toml
+  wt hooks init         create local hook scripts
+  wt shell init <shell> enable shell integration
 ```
 
 Outside a git repository, output should explain that worktree commands need a repo and show the common entry points:
@@ -170,7 +182,7 @@ Run inside a git repository to manage worktrees.
 Common commands:
   wt add <branch>
   wt list
-  wt completion <shell>
+  wt shell completion <shell>
 ```
 
 `wt` should not alias to `wt list`; that is convenient but less discoverable and slightly surprising for a root command.
@@ -254,7 +266,7 @@ Helpful failure when `--cd` is used without shell integration:
 
 ```text
 error: --cd requires shell integration
-hint: run `eval "$(wt init zsh)"` or use `cd "$(wt add feature/foo | tail -n 1)"`
+hint: run `eval "$(wt shell init zsh)"` or use `cd "$(wt add feature/foo | tail -n 1)"`
 ```
 
 ### Path rules
@@ -322,8 +334,9 @@ First version hooks:
 Hook examples:
 
 ```bash
-wt config set hooks.postCreate /absolute/path/to/post-create.sh
-wt config set hooks.preDelete /absolute/path/to/pre-delete.sh
+wt hooks init
+wt hooks edit post-create
+wt hooks edit pre-delete
 
 wt add feature/foo --post-create ./scripts/bootstrap.sh
 wt delete feature/foo --pre-delete ./scripts/cleanup.sh
@@ -598,13 +611,25 @@ cdAfterAdd = false
 Config commands:
 
 ```bash
+wt config init
+wt config init --global
+wt config path
+wt config path --global
+wt config edit
+wt config edit --global
+wt config list
+wt config list --plain
+```
+
+Direct key commands remain available for small updates and shell integration:
+
+```bash
 wt config get defaults.worktreesDir
 wt config set defaults.worktreesDir ../external-worktrees
 wt config set defaults.base origin/main
 wt config set defaults.copyLocal true
 wt config set hooks.postCreate /absolute/path/to/post-create.sh
 wt config set shell.cdAfterAdd true
-wt config list
 wt config unset hooks.postCreate
 ```
 
@@ -619,13 +644,13 @@ CLI flag > repo config > global config > built-in default
 First version supports:
 
 ```bash
-wt completion bash
-wt completion zsh
-wt completion fish
+wt shell completion bash
+wt shell completion zsh
+wt shell completion fish
 
-wt init bash
-wt init zsh
-wt init fish
+wt shell init bash
+wt shell init zsh
+wt shell init fish
 ```
 
 Completion should cover:
@@ -640,16 +665,16 @@ Completion should cover:
 Completion-only setup:
 
 ```bash
-eval "$(wt completion zsh)"
+eval "$(wt shell completion zsh)"
 ```
 
 Full shell integration:
 
 ```bash
-eval "$(wt init zsh)"
+eval "$(wt shell init zsh)"
 ```
 
-`wt init <shell>` should install completion and a small shell wrapper that delegates to the real binary. The wrapper is responsible for changing directories after a successful `wt add --cd` or when `shell.cdAfterAdd` is enabled.
+`wt shell init <shell>` should install completion and a small shell wrapper that delegates to the real binary. The wrapper is responsible for changing directories after a successful `wt add --cd` or when `shell.cdAfterAdd` is enabled.
 
 The wrapper should not pipe all `wt` output through `tee` or command substitution. Interactive commands such as `wt hooks edit` must keep direct access to the terminal. For cd handoff, the wrapper should pass a temporary `WT_CD_FILE`; `wt add` writes the target path there after success, and the wrapper reads it to `cd`.
 
@@ -657,7 +682,7 @@ Target experience:
 
 - `wt add <tab>` completes branch/base candidates.
 - `wt delete <tab>` completes existing worktrees.
-- `wt config set <tab>` completes config keys.
+- `wt config <tab>` completes config actions.
 - `wt add --cd` changes the interactive shell cwd after successful creation.
 - `shell.cdAfterAdd = true` makes successful interactive `wt add` enter the new worktree by default.
 - `wt add --no-cd` keeps the shell in place even when auto-cd is enabled.
@@ -685,8 +710,8 @@ Required command support:
 | `list/ls` | Table output |
 | `hooks` | `dir`, `init`, `path <hook>`, `edit <hook>` for repo-local hook scripts |
 | hooks | Repo config, CLI override, stable environment, non-zero exit handling |
-| config | Get/set repo defaults |
-| shell | bash, zsh, fish completion; `wt init <shell>` wrapper support for `--cd` and `shell.cdAfterAdd` |
+| config | `init`, `path`, `edit`, `list`, `get`, `set`, and `unset` for repo/global defaults |
+| shell | bash, zsh, fish completion; `wt shell init <shell>` wrapper support for `--cd` and `shell.cdAfterAdd` |
 | errors | Stage, command, exit code, stderr summary, and suggested next action |
 
 ## Stable Contracts

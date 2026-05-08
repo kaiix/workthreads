@@ -141,6 +141,50 @@ def write_config_file(path: Path, values: dict[str, object]) -> None:
     path.write_text(dump_toml(values), encoding="utf-8")
 
 
+def write_default_config_file(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(default_config_template(), encoding="utf-8")
+
+
+def default_config_template() -> str:
+    return """# workthreads configuration for the wt CLI.
+# Repo config lives at wt.toml. Global config lives at ~/.config/workthreads/config.toml.
+
+[defaults]
+# Parent directory for generated worktree paths. Relative paths are resolved from the main worktree.
+worktreesDir = ".worktrees"
+
+# Base ref used when --base is not provided. Leave commented to infer from the repository.
+# base = "origin/main"
+
+# Fetch the base remote before creating a worktree.
+fetch = false
+
+# Copy ignored and untracked local files into new worktrees.
+copyLocal = false
+
+# Delete the local branch when deleting a worktree.
+deleteBranch = false
+
+[hooks]
+# Command or script run after creating a worktree.
+# postCreate = "/absolute/path/to/post-create.sh"
+
+# Command or script run before deleting a worktree.
+# preDelete = "/absolute/path/to/pre-delete.sh"
+
+# Shell used to run lifecycle hook commands. Leave commented to use the platform default.
+# shell = "/bin/sh"
+
+# Hook timeout in seconds. 0 means no timeout.
+timeoutSeconds = 0
+
+[shell]
+# Enter new worktrees automatically when full shell integration is enabled.
+cdAfterAdd = false
+"""
+
+
 def dump_toml(values: dict[str, object]) -> str:
     lines: list[str] = []
     for section, section_values in values.items():
