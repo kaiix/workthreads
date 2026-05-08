@@ -63,7 +63,21 @@ wt config edit
 
 Repo configuration lives in `wt.toml` at the repository root. It can stay untracked for local workflow settings, or be committed only when the repo intentionally wants shared defaults. Use `wt config path` to print the active path.
 
-By default, `wt add feature/payment-retry` creates `.worktrees/feature/payment-retry` under the repo root.
+By default, `wt add feature/payment-retry` creates `.worktrees/feature/payment-retry` under the repo root. When the selected base ref belongs to a configured remote, `wt add` fetches that remote first; pass `--no-fetch` to skip this for one command.
+
+Recommended local workflow:
+
+```toml
+[defaults]
+fetch = true
+copyLocal = true
+deleteBranch = false
+
+[shell]
+cdAfterAdd = true
+```
+
+Keep `copyLocal = false` if you do not want local ignored and untracked files copied automatically. Enable it when fresh worktrees usually need local setup files such as `.env`, editor config, generated credentials, or scratch project config before the app can run.
 
 Create a worktree:
 
@@ -80,10 +94,10 @@ wt add feature/payment-retry \
   --copy-local
 ```
 
-Create and enter the new worktree when shell integration is enabled:
+Full shell integration enters newly created worktrees by default. To stay in the current directory for one command:
 
 ```bash
-wt add feature/payment-retry --cd
+wt add feature/payment-retry --no-cd
 ```
 
 Jump to an existing worktree when shell integration is enabled:

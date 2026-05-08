@@ -5,13 +5,23 @@ from pathlib import Path
 from conftest import init_repo, run_wt
 
 
-def test_builtin_worktrees_dir_defaults_to_dot_worktrees(tmp_path: Path, wt_env: dict[str, str]) -> None:
+EXPECTED_BUILTIN_DEFAULTS = {
+    "defaults.worktreesDir": ".worktrees",
+    "defaults.fetch": "true",
+    "defaults.copyLocal": "false",
+    "defaults.deleteBranch": "false",
+    "shell.cdAfterAdd": "true",
+}
+
+
+def test_builtin_defaults(tmp_path: Path, wt_env: dict[str, str]) -> None:
     repo = init_repo(tmp_path / "repo")
 
-    get_result = run_wt(["config", "get", "defaults.worktreesDir"], cwd=repo, env=wt_env)
+    for key, expected in EXPECTED_BUILTIN_DEFAULTS.items():
+        get_result = run_wt(["config", "get", key], cwd=repo, env=wt_env)
 
-    assert get_result.returncode == 0, get_result.stderr
-    assert get_result.stdout.strip() == ".worktrees"
+        assert get_result.returncode == 0, get_result.stderr
+        assert get_result.stdout.strip() == expected
 
 
 def test_config_set_get_and_list_repo_config(tmp_path: Path, wt_env: dict[str, str]) -> None:
@@ -51,7 +61,18 @@ def test_config_init_path_and_edit_use_config_files(tmp_path: Path, wt_env: dict
     init_result = run_wt(["config", "init"], cwd=repo, env=wt_env)
     assert init_result.returncode == 0, init_result.stderr
     assert f"created config: {repo_config}" in init_result.stdout
-    assert 'worktreesDir = ".worktrees"' in repo_config.read_text(encoding="utf-8")
+    config_text = repo_config.read_text(encoding="utf-8")
+    assert 'worktreesDir = ".worktrees"' in config_text
+    assert "fetch = true" in config_text
+    assert "copyLocal = false" in config_text
+    assert "deleteBranch = false" in config_text
+    assert "cdAfterAdd = true" in config_text
+
+    for key, expected in EXPECTED_BUILTIN_DEFAULTS.items():
+        get_result = run_wt(["config", "get", key], cwd=repo, env=wt_env)
+
+        assert get_result.returncode == 0, get_result.stderr
+        assert get_result.stdout.strip() == expected
 
     second_init = run_wt(["config", "init"], cwd=repo, env=wt_env)
     assert second_init.returncode == 0

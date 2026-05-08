@@ -62,16 +62,21 @@ wt config init
 wt config edit
 ```
 
-`wt config init` creates a commented `wt.toml` in the repo root. Edit only the defaults the repo or developer actually needs:
+`wt config init` creates a commented `wt.toml` in the repo root. Edit only the defaults the repo or developer actually needs. Detailed default rationale lives in [`workthreads-wt-config-defaults.md`](./workthreads-wt-config-defaults.md).
 
 ```toml
 [defaults]
 base = "origin/main"
+fetch = true
 copyLocal = true
+deleteBranch = false
 
 [hooks]
 postCreate = "/absolute/path/to/post-create.sh"
 preDelete = "/absolute/path/to/pre-delete.sh"
+
+[shell]
+cdAfterAdd = true
 ```
 
 The built-in worktree location is `.worktrees/<branch-path>` under the repo root, so the first setup step does not need to configure a path.
@@ -88,12 +93,12 @@ Completion-only setup is also available:
 eval "$(wt shell completion zsh)"
 ```
 
-Optional auto-cd for interactive shells:
+Shell auto-cd for interactive shells is enabled by default when full shell integration is active. Opt out in config or with `wt add --no-cd`:
 
 ```toml
 # In wt.toml:
 [shell]
-cdAfterAdd = true
+cdAfterAdd = false
 ```
 
 ### 2. Start a new work thread
@@ -102,7 +107,7 @@ cdAfterAdd = true
 wt add feature/payment-retry
 ```
 
-Create and enter the new worktree when shell integration is enabled:
+With full shell integration enabled, the shell enters the new worktree by default. To make the behavior explicit:
 
 ```bash
 wt add feature/payment-retry --cd
@@ -593,6 +598,8 @@ feature/webhook-audit   /repo/.worktrees/feature/webhook-audit    origin/main
 
 ## Configuration
 
+Config-default rationale and safety tradeoffs live in the focused design note [`workthreads-wt-config-defaults.md`](./workthreads-wt-config-defaults.md). Keep this section limited to the CLI contract and link to focused notes for detailed decisions.
+
 ### Config file location
 
 ```text
@@ -637,7 +644,7 @@ postCreate = "/absolute/path/to/post-create.sh"
 preDelete = "/absolute/path/to/pre-delete.sh"
 
 [shell]
-cdAfterAdd = false
+cdAfterAdd = true
 ```
 
 Config commands:

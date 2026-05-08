@@ -14,7 +14,7 @@ BUILTIN_CONFIG: dict[str, dict[str, object]] = {
     "defaults": {
         "worktreesDir": ".worktrees",
         "base": None,
-        "fetch": False,
+        "fetch": True,
         "copyLocal": False,
         "deleteBranch": False,
     },
@@ -25,7 +25,7 @@ BUILTIN_CONFIG: dict[str, dict[str, object]] = {
         "timeoutSeconds": 0,
     },
     "shell": {
-        "cdAfterAdd": False,
+        "cdAfterAdd": True,
     },
 }
 
@@ -158,12 +158,14 @@ worktreesDir = ".worktrees"
 # base = "origin/main"
 
 # Fetch the base remote before creating a worktree.
-fetch = false
+fetch = true
 
 # Copy ignored and untracked local files into new worktrees.
+# Enable when new worktrees need local setup files.
 copyLocal = false
 
 # Delete the local branch when deleting a worktree.
+# Keep false unless branch deletion is an intentional workflow default.
 deleteBranch = false
 
 [hooks]
@@ -181,7 +183,7 @@ timeoutSeconds = 0
 
 [shell]
 # Enter new worktrees automatically when full shell integration is enabled.
-cdAfterAdd = false
+cdAfterAdd = true
 """
 
 
