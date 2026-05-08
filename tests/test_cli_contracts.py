@@ -60,10 +60,12 @@ def test_completion_and_init_scripts_are_available(tmp_path: Path, wt_env: dict[
 
     assert completion.returncode == 0
     assert "compdef _wt wt" in completion.stdout
-    assert "shell root current" in completion.stdout
+    assert "cd config hooks shell root current" in completion.stdout
+    assert "__complete worktrees" in completion.stdout
     assert init.returncode == 0
     assert "WT_SHELL_INTEGRATION=1" in init.stdout
     assert "WT_CD_FILE" in init.stdout
+    assert "case \"$1\" in\n    cd)" in init.stdout
     assert "| tee" not in init.stdout
     assert "wt_status" in init.stdout
     assert "local tmp status" not in init.stdout

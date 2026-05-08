@@ -38,7 +38,7 @@ wt --help
 
 ## Shell setup
 
-Full shell integration includes completion and `wt add --cd` support:
+Full shell integration includes completion, `wt add --cd`, and `wt cd` support:
 
 ```bash
 eval "$(wt shell init zsh)"   # zsh
@@ -85,6 +85,14 @@ Create and enter the new worktree when shell integration is enabled:
 ```bash
 wt add feature/payment-retry --cd
 ```
+
+Jump to an existing worktree when shell integration is enabled:
+
+```bash
+wt cd payment-retry
+```
+
+`wt cd` accepts exact names and unique prefixes. For a worktree named `feat/foo`, both `wt cd feat` and `wt cd foo` can resolve it when unique. If `fzf` is installed, unresolved or ambiguous queries open a filtered picker instead of silently choosing a fuzzy match.
 
 List worktrees:
 

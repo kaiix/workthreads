@@ -32,18 +32,25 @@ def ensure_supported(shell: str) -> None:
 
 BASH_COMPLETION = r'''# wt bash completion
 _wt_completion() {
-  local cur cmd subcmd commands flags
+  local cur cmd subcmd commands flags wt_bin
   COMPREPLY=()
   cur="${COMP_WORDS[COMP_CWORD]}"
   cmd="${COMP_WORDS[1]}"
   subcmd="${COMP_WORDS[2]}"
-  commands="add new create delete rm list ls config hooks shell root current"
+  commands="add new create delete rm list ls cd config hooks shell root current"
   flags="--path --worktrees-dir --base --fetch --no-fetch --copy-local --copy-ignored --copy-untracked --overwrite --skip-hooks --cleanup-on-failure --post-create --pre-delete --force --delete-branch --keep-branch --cd --no-cd"
+  wt_bin="${WT_BIN:-$(command -v wt)}"
   if [[ "$COMP_CWORD" == 1 ]]; then
     COMPREPLY=( $(compgen -W "$commands" -- "$cur") )
     return 0
   fi
   case "$cmd" in
+    cd)
+      while IFS= read -r candidate; do
+        COMPREPLY+=("$candidate")
+      done < <("$wt_bin" __complete worktrees "$cur" 2>/dev/null)
+      return 0
+      ;;
     shell)
       if [[ "$COMP_CWORD" == 2 ]]; then
         COMPREPLY=( $(compgen -W "init completion" -- "$cur") )
@@ -88,11 +95,16 @@ complete -F _wt_completion wt
 ZSH_COMPLETION = r'''#compdef wt
 _wt() {
   local -a commands flags shells
-  commands=(add new create delete rm list ls config hooks shell root current)
+  commands=(add new create delete rm list ls cd config hooks shell root current)
   flags=(--path --worktrees-dir --base --fetch --no-fetch --copy-local --copy-ignored --copy-untracked --overwrite --skip-hooks --cleanup-on-failure --post-create --pre-delete --force --delete-branch --keep-branch --cd --no-cd)
   shells=(bash zsh fish)
   if (( CURRENT == 2 )); then
     _describe 'command' commands
+  elif [[ ${words[2]} == cd ]]; then
+    local wt_bin="${WT_BIN:-wt}"
+    local -a worktrees
+    worktrees=("${(@f)$("$wt_bin" __complete worktrees ${words[CURRENT]} 2>/dev/null)}")
+    _describe 'worktree' worktrees
   elif [[ ${words[2]} == shell ]] && (( CURRENT == 3 )); then
     local -a shell_commands=(init completion)
     _describe 'shell command' shell_commands
@@ -124,7 +136,8 @@ fi
 
 
 FISH_COMPLETION = r'''# wt fish completion
-complete -c wt -f -n "__fish_use_subcommand" -a "add new create delete rm list ls config hooks shell root current"
+complete -c wt -f -n "__fish_use_subcommand" -a "add new create delete rm list ls cd config hooks shell root current"
+complete -c wt -f -n "__fish_seen_subcommand_from cd" -a "(wt __complete worktrees (commandline -ct) 2>/dev/null)"
 complete -c wt -f -n "__fish_seen_subcommand_from shell" -a "init completion"
 complete -c wt -f -n "__fish_seen_subcommand_from shell; and contains -- (commandline -opc)[3] init completion" -a "bash zsh fish"
 complete -c wt -f -n "__fish_seen_subcommand_from config" -a "init path edit list get set unset"
@@ -157,6 +170,9 @@ BASH_INIT = r'''# wt bash integration
 __wt_bin="${WT_BIN:-$(command -v wt)}"
 __wt_should_cd() {
   case "$1" in
+    cd)
+      return 0
+      ;;
     add|new|create)
       case " $* " in *" --no-cd "*) return 1;; esac
       case " $* " in *" --cd "*) return 0;; esac
@@ -192,6 +208,9 @@ ZSH_INIT = r'''# wt zsh integration
 __wt_bin="${WT_BIN:-$(command -v wt)}"
 __wt_should_cd() {
   case "$1" in
+    cd)
+      return 0
+      ;;
     add|new|create)
       case " $* " in *" --no-cd "*) return 1;; esac
       case " $* " in *" --cd "*) return 0;; esac
@@ -228,6 +247,8 @@ FISH_INIT = FISH_COMPLETION + r'''
 set -gx __wt_bin (command -v wt)
 function __wt_should_cd
   switch $argv[1]
+    case cd
+      return 0
     case add new create
       contains -- --no-cd $argv; and return 1
       contains -- --cd $argv; and return 0

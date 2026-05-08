@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import errno
 import os
 import shlex
@@ -8,7 +9,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from . import __version__
 from . import config as config_module
@@ -39,6 +40,8 @@ def run(argv: list[str]) -> int:
     if not argv:
         handle_home()
         return int(ExitCode.SUCCESS)
+    if argv[0] == "__complete":
+        return handle_complete_args(argv[1:])
 
     parser = build_parser()
     namespace = parser.parse_args(argv)
@@ -50,6 +53,8 @@ def run(argv: list[str]) -> int:
         return handle_delete(namespace)
     if command in {"list", "ls"}:
         return handle_list(namespace)
+    if command == "cd":
+        return handle_cd(namespace)
     if command == "config":
         return handle_config(namespace)
     if command == "hooks":
@@ -137,6 +142,9 @@ def build_parser() -> argparse.ArgumentParser:
     delete_parser.add_argument("--skip-hooks", action="store_true")
 
     list_parser = subparsers.add_parser("list", aliases=["ls"], help="list worktrees")
+
+    cd_parser = subparsers.add_parser("cd", help="print or enter a worktree")
+    cd_parser.add_argument("target", nargs="?", help="branch, name, path, or unique prefix")
 
     config_parser = subparsers.add_parser("config", help="manage configuration files and values")
     config_subparsers = config_parser.add_subparsers(dest="config_action", required=True)
@@ -341,16 +349,17 @@ def handle_add(args: argparse.Namespace) -> int:
     return int(ExitCode.SUCCESS)
 
 
-def write_cd_target(path: Path, cd_requested: bool) -> None:
+def write_cd_target(path: Path, cd_requested: bool) -> bool:
     if not cd_requested:
-        return
+        return False
     cd_file = os.environ.get("WT_CD_FILE")
     if not cd_file:
-        return
+        return False
     try:
         Path(cd_file).write_text(str(path), encoding="utf-8")
     except OSError as error:
         raise WTError("failed to write shell cd target", details=str(error)) from error
+    return True
 
 
 def cleanup_failed_add(repo_root: Path, destination: Path, branch: str, created: bool, branch_created: bool) -> None:
@@ -552,6 +561,229 @@ def print_worktree_table(rows: list[dict[str, Any]]) -> None:
         base = row["base"] or "-"
         dirty = "yes" if row["dirty"] else "no"
         output.print_line(f"{branch:<28} {path:<40} {base:<20} {dirty}")
+
+
+@dataclass(frozen=True)
+class WorktreeCandidate:
+    worktree: git.Worktree
+    display: str
+    aliases: tuple[str, ...]
+
+
+def handle_cd(args: argparse.Namespace) -> int:
+    repo = git.require_repo(Path.cwd())
+    config = config_module.load_config(repo.main_root)
+    candidates = worktree_candidates(repo, config)
+    shell_integration = os.environ.get("WT_SHELL_INTEGRATION") == "1"
+
+    candidate: WorktreeCandidate | None = None
+    if args.target:
+        try:
+            candidate = resolve_cd_candidate(candidates, args.target, cwd=Path.cwd())
+        except UsageError:
+            if can_use_fzf():
+                candidate = select_candidate_with_fzf(candidates, query=args.target)
+                if candidate is None:
+                    raise UsageError("no worktree selected")
+            else:
+                raise
+    elif can_use_fzf():
+        candidate = select_candidate_with_fzf(candidates, query=None)
+        if candidate is None:
+            raise UsageError("no worktree selected")
+    else:
+        raise UsageError(
+            "missing worktree target",
+            hint="pass a branch/name prefix or run wt list",
+            details=format_candidate_details(candidates),
+        )
+
+    cd_written = write_cd_target(candidate.worktree.path, shell_integration)
+    if not cd_written:
+        output.print_line(str(candidate.worktree.path))
+    return int(ExitCode.SUCCESS)
+
+
+def handle_complete(args: argparse.Namespace) -> int:
+    if args.complete_subject != "worktrees":
+        raise UsageError(f"unknown completion subject: {args.complete_subject}")
+
+    repo = git.try_repo(Path.cwd())
+    if repo is None:
+        return int(ExitCode.SUCCESS)
+
+    config = config_module.load_config(repo.main_root)
+    prefix = args.prefix or ""
+    for candidate in completion_candidates(worktree_candidates(repo, config), prefix):
+        output.print_line(candidate.display)
+    return int(ExitCode.SUCCESS)
+
+
+def handle_complete_args(argv: list[str]) -> int:
+    if not argv:
+        raise UsageError("missing completion subject")
+    if len(argv) > 2:
+        raise UsageError("too many completion arguments")
+    return handle_complete(argparse.Namespace(complete_subject=argv[0], prefix=argv[1] if len(argv) == 2 else None))
+
+
+def worktree_candidates(repo: git.RepoContext, config: config_module.Config) -> list[WorktreeCandidate]:
+    root = worktrees_root(repo.main_root, config)
+    return [worktree_candidate(worktree, repo.main_root, root) for worktree in repo.worktrees]
+
+
+def worktree_candidate(worktree: git.Worktree, repo_root: Path, worktrees_dir: Path | None) -> WorktreeCandidate:
+    display = worktree.branch or worktree.name
+    aliases = [
+        display,
+        worktree.name,
+        worktree.path.name,
+        str(worktree.path),
+    ]
+
+    if worktree.path.is_relative_to(repo_root):
+        relative_to_repo = worktree.path.relative_to(repo_root).as_posix()
+        aliases.append(relative_to_repo)
+    if worktrees_dir and worktree.path.is_relative_to(worktrees_dir):
+        relative_to_worktrees = worktree.path.relative_to(worktrees_dir).as_posix()
+        aliases.append(relative_to_worktrees)
+
+    return WorktreeCandidate(worktree=worktree, display=display, aliases=tuple(unique_strings(aliases)))
+
+
+def unique_strings(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    unique: list[str] = []
+    for value in values:
+        if value and value not in seen:
+            seen.add(value)
+            unique.append(value)
+    return unique
+
+
+def resolve_cd_candidate(candidates: list[WorktreeCandidate], target: str, *, cwd: Path) -> WorktreeCandidate:
+    exact_matches = exact_candidate_matches(candidates, target, cwd=cwd)
+    if len(exact_matches) == 1:
+        return exact_matches[0]
+    if len(exact_matches) > 1:
+        raise ambiguous_worktree_error(target, exact_matches)
+
+    full_prefix_matches = unique_worktree_candidates(
+        candidate for candidate in candidates if candidate_matches_full_prefix(candidate, target)
+    )
+    if len(full_prefix_matches) == 1:
+        return full_prefix_matches[0]
+    if len(full_prefix_matches) > 1:
+        raise ambiguous_worktree_error(target, full_prefix_matches)
+
+    segment_prefix_matches = unique_worktree_candidates(
+        candidate for candidate in candidates if candidate_matches_segment_prefix(candidate, target)
+    )
+    if len(segment_prefix_matches) == 1:
+        return segment_prefix_matches[0]
+    if len(segment_prefix_matches) > 1:
+        raise ambiguous_worktree_error(target, segment_prefix_matches)
+
+    raise UsageError(f"unknown worktree: {target}", hint="run wt list to see available worktrees")
+
+
+def exact_candidate_matches(candidates: list[WorktreeCandidate], target: str, *, cwd: Path) -> list[WorktreeCandidate]:
+    path_candidates = target_path_candidates(target, cwd)
+    matches: list[WorktreeCandidate] = []
+    for candidate in candidates:
+        if candidate.worktree.path.resolve() in path_candidates or target in candidate.aliases:
+            matches.append(candidate)
+    return unique_worktree_candidates(matches)
+
+
+def target_path_candidates(target: str, cwd: Path) -> set[Path]:
+    target_path = Path(target).expanduser()
+    candidates: set[Path] = set()
+    if target_path.is_absolute():
+        candidates.add(target_path.resolve())
+    if "/" in target or target.startswith("."):
+        candidates.add((cwd / target_path).resolve())
+    return candidates
+
+
+def candidate_matches_full_prefix(candidate: WorktreeCandidate, target: str) -> bool:
+    return any(alias.startswith(target) for alias in candidate.aliases)
+
+
+def candidate_matches_segment_prefix(candidate: WorktreeCandidate, target: str) -> bool:
+    for alias in candidate.aliases:
+        if Path(alias).is_absolute():
+            continue
+        for segment in alias.split("/"):
+            if segment.startswith(target):
+                return True
+    return False
+
+
+def unique_worktree_candidates(candidates: Iterable[WorktreeCandidate]) -> list[WorktreeCandidate]:
+    seen: set[Path] = set()
+    unique: list[WorktreeCandidate] = []
+    for candidate in candidates:
+        key = candidate.worktree.path.resolve()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(candidate)
+    return unique
+
+
+def ambiguous_worktree_error(target: str, candidates: list[WorktreeCandidate]) -> UsageError:
+    return UsageError(
+        f"ambiguous worktree prefix: {target}",
+        hint="use a longer prefix or run wt list",
+        details=format_candidate_details(candidates),
+    )
+
+
+def format_candidate_details(candidates: list[WorktreeCandidate]) -> str:
+    if not candidates:
+        return "candidates: none"
+    display_width = max(len(candidate.display) for candidate in candidates)
+    lines = ["candidates:"]
+    for candidate in candidates:
+        lines.append(f"  {candidate.display:<{display_width}}  {candidate.worktree.path}")
+    return "\n".join(lines)
+
+
+def completion_candidates(candidates: list[WorktreeCandidate], prefix: str) -> list[WorktreeCandidate]:
+    if not prefix:
+        return candidates
+    return unique_worktree_candidates(
+        candidate
+        for candidate in candidates
+        if candidate_matches_full_prefix(candidate, prefix) or candidate_matches_segment_prefix(candidate, prefix)
+    )
+
+
+def can_use_fzf() -> bool:
+    return sys.stdin.isatty() and shutil.which("fzf") is not None
+
+
+def select_candidate_with_fzf(candidates: list[WorktreeCandidate], query: str | None) -> WorktreeCandidate | None:
+    rows = [fzf_row(candidate) for candidate in candidates]
+    args = ["fzf", "--prompt=wt cd> "]
+    if query:
+        args.extend(["--query", query])
+    result = subprocess.run(args, input="\n".join(rows) + "\n", text=True, stdout=subprocess.PIPE, check=False)
+    if result.returncode != 0:
+        return None
+    selected = result.stdout.rstrip("\n")
+    if not selected:
+        return None
+    selected_path = selected.rsplit("\t", 1)[-1]
+    for candidate in candidates:
+        if str(candidate.worktree.path) == selected_path:
+            return candidate
+    return None
+
+
+def fzf_row(candidate: WorktreeCandidate) -> str:
+    return f"{candidate.display}\t{candidate.worktree.path}"
 
 
 def handle_config(args: argparse.Namespace) -> int:

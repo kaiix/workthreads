@@ -50,6 +50,7 @@ def print_home(repo_root: Path | None, current: str | None, default_path: str | 
     print_line()
     print_line("Common commands:")
     print_line("  wt add <branch>       create a worktree")
+    print_line("  wt cd <target>        enter an existing worktree")
     print_line("  wt delete [target]    delete current or named worktree")
     print_line("  wt list               list worktrees")
     print_line()

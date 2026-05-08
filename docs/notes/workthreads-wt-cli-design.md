@@ -11,6 +11,7 @@ The tool should not feel like a thin wrapper around `git worktree`. It should be
 - Bring over local-only project data when needed.
 - Run setup and cleanup scripts at the right lifecycle moments.
 - Delete the current worktree without making the developer restate obvious context.
+- Navigate between existing worktrees from the shell.
 - Integrate with the shell through completion, stable output, and optional directory switching.
 
 ## Core Principle: DX First
@@ -20,7 +21,7 @@ Developer Experience is the first design constraint. Common actions should be sh
 | Principle | Design impact |
 | --- | --- |
 | Context-aware | Detect the repo root automatically. If `wt delete` is run inside a linked worktree, delete that current worktree by default. |
-| Short common path | The common commands are `wt add <branch>`, `wt delete`, and `wt list`. Aliases can exist, but docs and help should lead with the clearest names. |
+| Short common path | The common commands are `wt add <branch>`, `wt cd <target>`, `wt delete`, and `wt list`. Aliases can exist, but docs and help should lead with the clearest names. |
 | Safe by default | Do not silently delete dirty worktrees. Do not overwrite copied files by default. Do not auto-remove a partially created worktree unless the user asks for cleanup. |
 | Human-friendly and scriptable | Default output should help humans. Successful commands should keep stable plain-text contracts where scripts need them, such as `wt add` printing the worktree path as the final line. |
 | Fixable errors | Errors should say what failed, why, and what to run next. |
@@ -38,6 +39,7 @@ These names are optimized for the workthreads workflow, not for matching any exi
 | Short delete alias | `wt rm [target]` | Familiar for CLI users, but secondary because `delete` is clearer. |
 | List worktrees | `wt list` | Clear in docs and help. |
 | Short list alias | `wt ls` | Convenient for frequent CLI use. |
+| Navigate to a worktree | `wt cd [target]` | Matches the user's intent when shell integration can actually change cwd. |
 | Base branch/ref | `--base <ref>` | Matches the concept developers are choosing. |
 | Exact destination | `--path <path>` | Means "put this worktree at exactly this path". |
 | Parent directory for generated paths | `--worktrees-dir <dir>` | Clearly means the parent directory for generated worktree paths. |
@@ -121,6 +123,14 @@ wt add feature/payment-retry \
 
 The created directory is a normal git worktree. The developer can run their editor, tests, agents, or local services there. If `--cd` or shell auto-cd was used, the interactive shell is already inside the new worktree.
 
+Jump between existing worktrees when shell integration is enabled:
+
+```bash
+wt cd payment-retry
+```
+
+`wt cd` accepts exact names and unique prefixes. For a worktree named `feat/foo`, both `wt cd feat` and `wt cd foo` can resolve it when unique. If `fzf` is installed, unresolved or ambiguous queries open a filtered picker for confirmation.
+
 ### 4. Delete the current worktree
 
 From inside the linked worktree:
@@ -143,6 +153,7 @@ wt delete feature/payment-retry
 | `wt add <branch>` | `wt new <branch>`, `wt create <branch>` | Create a new linked worktree and branch. |
 | `wt delete [target]` | `wt rm [target]` | Delete a linked worktree. `target` is optional inside a linked worktree. |
 | `wt list` | `wt ls` | List worktrees. |
+| `wt cd [target]` | - | Print or enter an existing worktree. |
 | `wt config` | - | Create, edit, inspect, and update configuration. |
 | `wt hooks` | - | Manage repo-local hook scripts under git's common dir. |
 | `wt shell completion <shell>` | - | Print shell completion for bash, zsh, or fish. |
@@ -164,6 +175,7 @@ default path: .worktrees/<branch-path>
 
 Common commands:
   wt add <branch>       create a worktree
+  wt cd <target>        enter an existing worktree
   wt delete [target]    delete current or named worktree
   wt list               list worktrees
 
@@ -288,6 +300,26 @@ hint: run `eval "$(wt shell init zsh)"` or use `cd "$(wt add feature/foo | tail 
 - Before creation, validate that `<ref>^{commit}` exists.
 - If `--fetch` is set, fetch the remote implied by the base ref when possible.
 - `--no-fetch` disables fetching when config enables `defaults.fetch`.
+
+## `wt cd`
+
+`wt cd [target]` navigates to an existing worktree when shell integration is enabled. Without shell integration, it prints the resolved path so users can still run:
+
+```bash
+cd "$(wt cd foo)"
+```
+
+Target resolution order:
+
+1. Exact branch/name/path match.
+2. Full-key prefix, such as `feat` for `feat/foo`.
+3. Segment-prefix, such as `foo` or `fo` for `feat/foo` when unique.
+4. Optional `fzf` picker for unresolved or ambiguous queries when `fzf` is installed and the shell is interactive.
+5. Usage error with candidates or a `wt list` hint.
+
+Deterministic `wt cd <target>` should not silently use arbitrary substring matching. For example, `wt cd oo` should not automatically choose `feat/foo`. If `fzf` is available, `wt cd oo` can open a picker prefilled with `oo` so the user confirms the fuzzy match.
+
+Successful shell-integrated `wt cd <target>` should be quiet like the shell builtin `cd`. If shell integration is not active, success output is the destination path.
 
 ## Copying Local Files
 
@@ -674,7 +706,7 @@ Full shell integration:
 eval "$(wt shell init zsh)"
 ```
 
-`wt shell init <shell>` should install completion and a small shell wrapper that delegates to the real binary. The wrapper is responsible for changing directories after a successful `wt add --cd` or when `shell.cdAfterAdd` is enabled.
+`wt shell init <shell>` should install completion and a small shell wrapper that delegates to the real binary. The wrapper is responsible for changing directories after a successful `wt add --cd`, `wt cd`, or when `shell.cdAfterAdd` is enabled.
 
 The wrapper should not pipe all `wt` output through `tee` or command substitution. Interactive commands such as `wt hooks edit` must keep direct access to the terminal. For cd handoff, the wrapper should pass a temporary `WT_CD_FILE`; `wt add` writes the target path there after success, and the wrapper reads it to `cd`.
 
@@ -683,7 +715,9 @@ Target experience:
 - `wt add <tab>` completes branch/base candidates.
 - `wt delete <tab>` completes existing worktrees.
 - `wt config <tab>` completes config actions.
+- `wt cd foo<tab>` completes existing worktrees using full-prefix and segment-prefix matching.
 - `wt add --cd` changes the interactive shell cwd after successful creation.
+- `wt cd <target>` changes the interactive shell cwd to an existing worktree.
 - `shell.cdAfterAdd = true` makes successful interactive `wt add` enter the new worktree by default.
 - `wt add --no-cd` keeps the shell in place even when auto-cd is enabled.
 
@@ -698,7 +732,8 @@ The first version should fully support the easiest workflow:
 5. List worktrees.
 6. Delete the current or named worktree.
 7. Run cleanup hook.
-8. Use shell completion and optional shell `cd` integration.
+8. Navigate between worktrees.
+9. Use shell completion and optional shell `cd` integration.
 
 Required command support:
 
@@ -708,6 +743,7 @@ Required command support:
 | `add/new/create` | `--path`, `--worktrees-dir`, `--base`, `--fetch`, `--no-fetch`, `--copy-local`, `--copy-ignored`, `--copy-untracked`, `--overwrite`, `--skip-hooks`, `--cleanup-on-failure`, `--post-create`, `--cd`, `--no-cd` |
 | `delete/rm` | Optional target inside linked worktree, branch/name/path target resolution, dirty checks, `--force`, `--delete-branch`, `--keep-branch`, `--pre-delete`, `--skip-hooks` |
 | `list/ls` | Table output |
+| `cd` | Exact, full-prefix, segment-prefix, and optional `fzf` worktree navigation |
 | `hooks` | `dir`, `init`, `path <hook>`, `edit <hook>` for repo-local hook scripts |
 | hooks | Repo config, CLI override, stable environment, non-zero exit handling |
 | config | `init`, `path`, `edit`, `list`, `get`, `set`, and `unset` for repo/global defaults |
@@ -731,6 +767,14 @@ Required command support:
 - Running `wt` with no arguments has no side effects.
 - Inside a repository, it shows contextual help/status.
 - Outside a repository, it shows general help and a repo-required hint.
+
+### `wt cd` success guarantees
+
+- The target path is an existing git worktree.
+- Without shell integration, the command prints the destination path.
+- With shell integration, the command writes the destination to `WT_CD_FILE` and lets the shell wrapper change cwd.
+- Deterministic matching uses exact, full-prefix, and segment-prefix matches only.
+- Fuzzy substring matching requires interactive `fzf` confirmation.
 
 ### `wt delete` success guarantees
 
