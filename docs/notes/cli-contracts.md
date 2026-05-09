@@ -2,7 +2,7 @@
 
 Status: active
 Surface: CLI contracts
-Verified against: src/workthreads/cli.py, tests/test_cli_contracts.py, tests/test_workflows.py, tests/test_cd.py
+Verified against: src/workthreads/cli.py, tests/test_cli_contracts.py, tests/test_workflows.py, tests/test_cd.py, tests/test_spinner.py
 
 ## Bare `wt`
 
@@ -67,6 +67,12 @@ The final line is only the worktree path. Without shell integration, this is the
 ```bash
 cd "$(wt add feature/payment-retry --base origin/main | tail -n 1)"
 ```
+
+## Interactive progress
+
+Long-running `wt add` and `wt delete` phases may show spinner/status output when stderr is an interactive terminal. Progress output must be written only to stderr and disabled for captured or non-TTY stderr, so command stdout remains stable for scripts and shell integration.
+
+Scripts should not rely on progress text or spinner frames. They should continue to use documented stdout contracts, such as the final path line from `wt add`.
 
 ## Bare `wt` guarantees
 

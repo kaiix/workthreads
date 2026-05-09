@@ -252,7 +252,8 @@ def handle_add(args: argparse.Namespace) -> int:
     if fetch:
         remote = git.remote_for_base(base, repo.main_root)
         if remote:
-            git.run_git(["fetch", remote], cwd=repo.main_root)
+            with output.status(f"fetching {remote}"):
+                git.run_git(["fetch", remote], cwd=repo.main_root)
 
     if not git.ref_exists(base, repo.main_root):
         raise UsageError(f"base ref does not exist: {base}", hint="pass --base <ref> or run git fetch")
@@ -286,39 +287,38 @@ def handle_add(args: argparse.Namespace) -> int:
     created = False
     branch_created = False
     try:
-        git.add_worktree(args.branch, destination, base, repo.main_root)
+        with output.status("creating worktree"):
+            git.add_worktree(args.branch, destination, base, repo.main_root)
         created = True
         branch_created = True
 
-        copied = copy_module.copy_selected_files(
-            repo.current_root,
-            destination,
-            selection,
-            overwrite=args.overwrite,
-        )
+        if selection.files:
+            with output.status("copying local files"):
+                copied = copy_module.copy_selected_files(
+                    repo.current_root,
+                    destination,
+                    selection,
+                    overwrite=args.overwrite,
+                )
+        else:
+            copied = copy_module.CopyCounts()
 
         hook_result = hooks.HookResult(command=None, exit_code=None, skipped=True)
         if not args.skip_hooks:
             hook_command = args.post_create or config.get_str("hooks.postCreate")
-            hook_result = hooks.run_hook(
-                hook_command,
-                event="post-create",
-                cwd=destination,
-                env=hooks.hook_env(
-                    event="post-create",
-                    repo_root=repo.main_root,
-                    worktree_path=destination,
-                    worktree_name=destination.name,
-                    branch=args.branch,
-                    base=base,
-                    copy_local=copy_local,
-                    copy_ignored=copy_ignored,
-                    copy_untracked=copy_untracked,
-                    dirty=False,
-                ),
-                shell=config.get_str("hooks.shell"),
-                timeout_seconds=config.get_int("hooks.timeoutSeconds"),
-            )
+            if hook_command:
+                with output.status("running post-create hook"):
+                    hook_result = run_post_create_hook(
+                        hook_command,
+                        repo=repo,
+                        destination=destination,
+                        branch=args.branch,
+                        base=base,
+                        copy_local=copy_local,
+                        copy_ignored=copy_ignored,
+                        copy_untracked=copy_untracked,
+                        config=config,
+                    )
 
         metadata.save_metadata(
             repo.main_root,
@@ -347,6 +347,39 @@ def handle_add(args: argparse.Namespace) -> int:
         cd_requested=cd_requested,
     )
     return int(ExitCode.SUCCESS)
+
+
+def run_post_create_hook(
+    hook_command: str,
+    *,
+    repo: git.RepoContext,
+    destination: Path,
+    branch: str,
+    base: str,
+    copy_local: bool,
+    copy_ignored: bool,
+    copy_untracked: bool,
+    config: config_module.Config,
+) -> hooks.HookResult:
+    return hooks.run_hook(
+        hook_command,
+        event="post-create",
+        cwd=destination,
+        env=hooks.hook_env(
+            event="post-create",
+            repo_root=repo.main_root,
+            worktree_path=destination,
+            worktree_name=destination.name,
+            branch=branch,
+            base=base,
+            copy_local=copy_local,
+            copy_ignored=copy_ignored,
+            copy_untracked=copy_untracked,
+            dirty=False,
+        ),
+        shell=config.get_str("hooks.shell"),
+        timeout_seconds=config.get_int("hooks.timeoutSeconds"),
+    )
 
 
 def write_cd_target(path: Path, cd_requested: bool) -> bool:
@@ -426,24 +459,27 @@ def handle_delete(args: argparse.Namespace) -> int:
     hook_result = hooks.HookResult(command=None, exit_code=None, skipped=True)
     if not args.skip_hooks:
         hook_command = args.pre_delete or config.get_str("hooks.preDelete")
-        hook_result = hooks.run_hook(
-            hook_command,
-            event="pre-delete",
-            cwd=target.path,
-            env=hooks.hook_env(
-                event="pre-delete",
-                repo_root=repo.main_root,
-                worktree_path=target.path,
-                worktree_name=target.name,
-                branch=target.branch,
-                base=None,
-                dirty=dirty,
-            ),
-            shell=config.get_str("hooks.shell"),
-            timeout_seconds=config.get_int("hooks.timeoutSeconds"),
-        )
+        if hook_command:
+            with output.status("running pre-delete hook"):
+                hook_result = hooks.run_hook(
+                    hook_command,
+                    event="pre-delete",
+                    cwd=target.path,
+                    env=hooks.hook_env(
+                        event="pre-delete",
+                        repo_root=repo.main_root,
+                        worktree_path=target.path,
+                        worktree_name=target.name,
+                        branch=target.branch,
+                        base=None,
+                        dirty=dirty,
+                    ),
+                    shell=config.get_str("hooks.shell"),
+                    timeout_seconds=config.get_int("hooks.timeoutSeconds"),
+                )
 
-    git.remove_worktree(target.path, repo.main_root, force=force_remove)
+    with output.status("removing worktree"):
+        git.remove_worktree(target.path, repo.main_root, force=force_remove)
     cleanup_empty_worktree_parents(target.path, worktrees_root(repo.main_root, config))
     delete_branch = args.delete_branch if args.delete_branch is not None else config.get_bool("defaults.deleteBranch")
     branch_state = "kept"

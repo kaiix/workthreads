@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from pathlib import Path
 import sys
 
@@ -17,6 +18,13 @@ def console(stderr: bool = False):
     if Console is None:
         return None
     return Console(stderr=stderr)
+
+
+def status(text: str, *, spinner: str = "dots", stderr: bool = True):
+    rich_console = console(stderr=stderr)
+    if rich_console is None or not rich_console.is_terminal:
+        return nullcontext()
+    return rich_console.status(text, spinner=spinner)
 
 
 def print_line(text: str = "", *, stderr: bool = False) -> None:
