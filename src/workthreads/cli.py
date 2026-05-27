@@ -282,6 +282,7 @@ def handle_add(args: argparse.Namespace) -> int:
         repo.current_root,
         copy_ignored=copy_ignored,
         copy_untracked=copy_untracked,
+        exclude_paths=local_copy_exclude_paths(repo, config),
     )
 
     created = False
@@ -505,6 +506,30 @@ def worktrees_root(repo_root: Path, config: config_module.Config) -> Path | None
     if not root.is_absolute():
         root = repo_root / root
     return root.resolve()
+
+
+def local_copy_exclude_paths(repo: git.RepoContext, config: config_module.Config) -> list[Path]:
+    source_root = repo.current_root.resolve()
+    exclude_paths: list[Path] = []
+
+    configured_root = worktrees_root(repo.main_root, config)
+    if configured_root is not None:
+        append_relative_exclude_path(exclude_paths, configured_root, source_root)
+
+    for worktree in repo.worktrees:
+        append_relative_exclude_path(exclude_paths, worktree.path, source_root)
+
+    return exclude_paths
+
+
+def append_relative_exclude_path(exclude_paths: list[Path], path: Path, root: Path) -> None:
+    try:
+        relative_path = path.resolve().relative_to(root)
+    except ValueError:
+        return
+    if not relative_path.parts or relative_path in exclude_paths:
+        return
+    exclude_paths.append(relative_path)
 
 
 def cleanup_empty_worktree_parents(target_path: Path, root: Path | None) -> None:

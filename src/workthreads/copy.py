@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 import ctypes
@@ -13,6 +14,10 @@ from .errors import WTError
 from . import git
 
 
+EXCLUDED_COPY_PARTS = {".git", ".worktrees", ".workthreads"}
+_DARWIN_CLONEFILE: Callable[[bytes, bytes, int], int] | None = None
+
+
 @dataclass(frozen=True)
 class CopyCounts:
     ignored: int = 0
@@ -22,6 +27,7 @@ class CopyCounts:
 @dataclass(frozen=True)
 class CopySelection:
     files: dict[Path, str]
+    exclude_paths: tuple[Path, ...] = ()
 
     @property
     def counts(self) -> CopyCounts:
@@ -30,33 +36,66 @@ class CopySelection:
         return CopyCounts(ignored=ignored, untracked=untracked)
 
 
-def select_local_files(source_root: Path, *, copy_ignored: bool, copy_untracked: bool) -> CopySelection:
+def select_local_files(
+    source_root: Path,
+    *,
+    copy_ignored: bool,
+    copy_untracked: bool,
+    exclude_paths: Iterable[Path] = (),
+) -> CopySelection:
     files: dict[Path, str] = {}
+    normalized_exclude_paths = tuple(exclude_paths)
     if copy_ignored:
         for path in git.ignored_files(source_root):
-            if should_copy(path):
+            if should_copy(path, exclude_paths=normalized_exclude_paths):
                 files[path] = "ignored"
     if copy_untracked:
         for path in git.untracked_files(source_root):
-            if should_copy(path) and path not in files:
+            if (
+                should_copy(path, exclude_paths=normalized_exclude_paths)
+                and path not in files
+            ):
                 files[path] = "untracked"
-    return CopySelection(files=files)
+    return CopySelection(files=files, exclude_paths=normalized_exclude_paths)
 
 
-def should_copy(path: Path) -> bool:
-    parts = path.parts
-    return ".git" not in parts and ".workthreads" not in parts
+def should_copy(path: Path, *, exclude_paths: Iterable[Path] = ()) -> bool:
+    if any(part in EXCLUDED_COPY_PARTS for part in path.parts):
+        return False
+    return not any(
+        path == excluded_path or path.is_relative_to(excluded_path)
+        for excluded_path in exclude_paths
+    )
 
 
-def copy_selected_files(source_root: Path, destination_root: Path, selection: CopySelection, *, overwrite: bool) -> CopyCounts:
+def copy_selected_files(
+    source_root: Path,
+    destination_root: Path,
+    selection: CopySelection,
+    *,
+    overwrite: bool,
+) -> CopyCounts:
     counts = {"ignored": 0, "untracked": 0}
     for relative_path, category in selection.files.items():
-        copy_one(source_root / relative_path, destination_root / relative_path, overwrite=overwrite)
+        copy_one(
+            source_root / relative_path,
+            destination_root / relative_path,
+            overwrite=overwrite,
+            relative_path=relative_path,
+            exclude_paths=selection.exclude_paths,
+        )
         counts[category] += 1
     return CopyCounts(ignored=counts["ignored"], untracked=counts["untracked"])
 
 
-def copy_one(source: Path, destination: Path, *, overwrite: bool) -> None:
+def copy_one(
+    source: Path,
+    destination: Path,
+    *,
+    overwrite: bool,
+    relative_path: Path | None = None,
+    exclude_paths: Iterable[Path] = (),
+) -> None:
     if destination.exists() or destination.is_symlink():
         if not overwrite:
             raise WTError(
@@ -72,15 +111,34 @@ def copy_one(source: Path, destination: Path, *, overwrite: bool) -> None:
     if source.is_symlink():
         destination.symlink_to(source.readlink())
     elif source.is_dir():
-        copy_tree(source, destination)
+        copy_tree(source, destination, relative_path=relative_path, exclude_paths=exclude_paths)
     else:
         copy_file(source, destination)
 
 
-def copy_tree(source: Path, destination: Path) -> None:
+def copy_tree(
+    source: Path,
+    destination: Path,
+    *,
+    relative_path: Path | None = None,
+    exclude_paths: Iterable[Path] = (),
+) -> None:
     destination.mkdir()
     for child in source.iterdir():
-        copy_one(child, destination / child.name, overwrite=False)
+        child_relative_path = (
+            relative_path / child.name
+            if relative_path is not None
+            else Path(child.name)
+        )
+        if not should_copy(child_relative_path, exclude_paths=exclude_paths):
+            continue
+        copy_one(
+            child,
+            destination / child.name,
+            overwrite=False,
+            relative_path=child_relative_path,
+            exclude_paths=exclude_paths,
+        )
     shutil.copystat(source, destination, follow_symlinks=False)
 
 
@@ -107,16 +165,22 @@ def try_clone_file(source: Path, destination: Path) -> bool:
 
 
 def clone_file_darwin(source: Path, destination: Path) -> None:
-    libc = ctypes.CDLL("libc.dylib", use_errno=True)
-    clonefile = libc.clonefile
-    clonefile.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint32]
-    clonefile.restype = ctypes.c_int
-
-    result = clonefile(os.fsencode(source), os.fsencode(destination), 0)
+    result = darwin_clonefile()(os.fsencode(source), os.fsencode(destination), 0)
     if result != 0:
         error_number = ctypes.get_errno()
         raise OSError(error_number, os.strerror(error_number), str(destination))
     shutil.copystat(source, destination, follow_symlinks=False)
+
+
+def darwin_clonefile() -> Callable[[bytes, bytes, int], int]:
+    global _DARWIN_CLONEFILE
+    if _DARWIN_CLONEFILE is None:
+        libc = ctypes.CDLL("libc.dylib", use_errno=True)
+        clonefile = libc.clonefile
+        clonefile.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint32]
+        clonefile.restype = ctypes.c_int
+        _DARWIN_CLONEFILE = clonefile
+    return _DARWIN_CLONEFILE
 
 
 def clone_file_linux(source: Path, destination: Path) -> None:

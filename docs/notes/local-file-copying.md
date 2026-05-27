@@ -31,7 +31,7 @@ wt add feature/payment-retry --copy-local
 - Use `git ls-files` to compute file sets.
 - Never parse `.gitignore` manually.
 - Never copy `.git/`.
-- Avoid copying nested worktrees.
+- Avoid copying nested worktrees, including the default `.worktrees/` directory and any configured `defaults.worktreesDir` that lives inside the source worktree.
 - Handle files, directories, and symlinks.
 - Use copy-on-write clone/reflink for regular files when the platform and filesystem support it; fall back to normal copy.
 - Copy directories recursively so regular files inside directories can still use clone/reflink.

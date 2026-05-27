@@ -94,3 +94,25 @@ def test_add_uses_default_dot_worktrees_directory(tmp_path: Path, wt_env: dict[s
     assert not destination.exists()
     assert not (repo / ".worktrees" / "feature").exists()
     assert (repo / ".worktrees").exists()
+
+
+def test_add_copy_local_skips_configured_worktrees_directory(tmp_path: Path, wt_env: dict[str, str]) -> None:
+    repo = init_repo(tmp_path / "repo")
+    (repo / ".gitignore").write_text(".env.local\nthreads/\n", encoding="utf-8")
+    run_git(["add", ".gitignore"], cwd=repo)
+    run_git(["commit", "-m", "ignore local files"], cwd=repo)
+    config = run_wt(["config", "set", "defaults.worktreesDir", "threads"], cwd=repo, env=wt_env)
+    assert config.returncode == 0, config.stderr
+
+    (repo / ".env.local").write_text("TOKEN=local\n", encoding="utf-8")
+    existing_worktree_dir = repo / "threads" / "existing"
+    existing_worktree_dir.mkdir(parents=True)
+    (existing_worktree_dir / "cache.txt").write_text("large cache\n", encoding="utf-8")
+    destination = repo / "threads" / "feature" / "config-dir"
+
+    add = run_wt(["add", "feature/config-dir", "--base", "HEAD", "--copy-local"], cwd=repo, env=wt_env)
+
+    assert add.returncode == 0, add.stderr
+    assert add.stdout.splitlines()[-1] == str(destination)
+    assert (destination / ".env.local").read_text(encoding="utf-8") == "TOKEN=local\n"
+    assert not (destination / "threads").exists()
