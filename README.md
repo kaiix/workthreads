@@ -8,9 +8,22 @@ Prerequisites:
 
 - Git
 - Python 3.12+
-- [`uv`](https://docs.astral.sh/uv/)
 
-Install dependencies for local development:
+Install the latest release from PyPI:
+
+```bash
+uv tool install workthreads
+wt --help
+```
+
+Alternative user-level install without uv-managed tools:
+
+```bash
+python3 -m pip install --user workthreads
+wt --help
+```
+
+For local development, install [`uv`](https://docs.astral.sh/uv/) and sync dependencies:
 
 ```bash
 uv sync
@@ -22,17 +35,10 @@ Run the CLI from the repo during development:
 uv run wt --help
 ```
 
-Install `wt` once so it is available globally on your PATH and you do not need to use `uv run` every time:
+Install the local checkout once so it is available globally on your PATH and you do not need to use `uv run` every time:
 
 ```bash
 uv tool install -e .
-wt --help
-```
-
-Alternative user-level install without uv-managed tools:
-
-```bash
-python3 -m pip install --user -e .
 wt --help
 ```
 
