@@ -34,9 +34,22 @@ wt add feature/payment-retry --copy-local
 - Avoid copying nested worktrees, including the default `.worktrees/` directory and any configured `defaults.worktreesDir` that lives inside the source worktree.
 - Handle files, directories, and symlinks.
 - Use copy-on-write clone/reflink for regular files when the platform and filesystem support it; fall back to normal copy.
+- When fallback first occurs, emit one highlighted stderr warning that regular copying is slower and may use additional disk space.
 - Copy directories recursively so regular files inside directories can still use clone/reflink.
+- Apply `defaults.copyExclude` to ignored and untracked selections before copying.
 - Do not overwrite existing destination files unless `--overwrite` is set.
 
 ## Default stance
 
 `defaults.copyLocal` is intentionally `false` by default. See [config defaults](config-defaults.md) for the rationale and future large-copy mitigation ideas.
+
+## Configurable exclusions
+
+`defaults.copyExclude` applies root-level Git-ignore patterns to `--copy-local`, `--copy-ignored`, `--copy-untracked`, and config-enabled local copying:
+
+```toml
+[defaults]
+copyExclude = [".venv/", "node_modules/", "*.log"]
+```
+
+Patterns filter source paths before copying. Ordered `!` negation follows normal Git ignore rules but cannot re-enable built-in safety exclusions. Repo config replaces the global exclusion array. See [local copy exclusions](copy-exclusions.md) for the full contract and implementation details.

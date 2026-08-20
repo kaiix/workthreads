@@ -42,17 +42,24 @@ def select_local_files(
     copy_ignored: bool,
     copy_untracked: bool,
     exclude_paths: Iterable[Path] = (),
+    exclude_patterns: Iterable[str] = (),
 ) -> CopySelection:
     files: dict[Path, str] = {}
     normalized_exclude_paths = tuple(exclude_paths)
+    excluded_files = (
+        set(git.files_matching_exclude_patterns(source_root, exclude_patterns))
+        if copy_ignored or copy_untracked
+        else set()
+    )
     if copy_ignored:
         for path in git.ignored_files(source_root):
-            if should_copy(path, exclude_paths=normalized_exclude_paths):
+            if path not in excluded_files and should_copy(path, exclude_paths=normalized_exclude_paths):
                 files[path] = "ignored"
     if copy_untracked:
         for path in git.untracked_files(source_root):
             if (
-                should_copy(path, exclude_paths=normalized_exclude_paths)
+                path not in excluded_files
+                and should_copy(path, exclude_paths=normalized_exclude_paths)
                 and path not in files
             ):
                 files[path] = "untracked"
@@ -74,7 +81,18 @@ def copy_selected_files(
     selection: CopySelection,
     *,
     overwrite: bool,
+    on_clone_fallback: Callable[[], None] | None = None,
 ) -> CopyCounts:
+    fallback_reported = False
+
+    def report_clone_fallback() -> None:
+        nonlocal fallback_reported
+        if fallback_reported:
+            return
+        fallback_reported = True
+        if on_clone_fallback is not None:
+            on_clone_fallback()
+
     counts = {"ignored": 0, "untracked": 0}
     for relative_path, category in selection.files.items():
         copy_one(
@@ -83,6 +101,7 @@ def copy_selected_files(
             overwrite=overwrite,
             relative_path=relative_path,
             exclude_paths=selection.exclude_paths,
+            on_clone_fallback=report_clone_fallback,
         )
         counts[category] += 1
     return CopyCounts(ignored=counts["ignored"], untracked=counts["untracked"])
@@ -95,6 +114,7 @@ def copy_one(
     overwrite: bool,
     relative_path: Path | None = None,
     exclude_paths: Iterable[Path] = (),
+    on_clone_fallback: Callable[[], None] | None = None,
 ) -> None:
     if destination.exists() or destination.is_symlink():
         if not overwrite:
@@ -111,9 +131,15 @@ def copy_one(
     if source.is_symlink():
         destination.symlink_to(source.readlink())
     elif source.is_dir():
-        copy_tree(source, destination, relative_path=relative_path, exclude_paths=exclude_paths)
+        copy_tree(
+            source,
+            destination,
+            relative_path=relative_path,
+            exclude_paths=exclude_paths,
+            on_clone_fallback=on_clone_fallback,
+        )
     else:
-        copy_file(source, destination)
+        copy_file(source, destination, on_clone_fallback=on_clone_fallback)
 
 
 def copy_tree(
@@ -122,6 +148,7 @@ def copy_tree(
     *,
     relative_path: Path | None = None,
     exclude_paths: Iterable[Path] = (),
+    on_clone_fallback: Callable[[], None] | None = None,
 ) -> None:
     destination.mkdir()
     for child in source.iterdir():
@@ -138,13 +165,21 @@ def copy_tree(
             overwrite=False,
             relative_path=child_relative_path,
             exclude_paths=exclude_paths,
+            on_clone_fallback=on_clone_fallback,
         )
     shutil.copystat(source, destination, follow_symlinks=False)
 
 
-def copy_file(source: Path, destination: Path) -> None:
+def copy_file(
+    source: Path,
+    destination: Path,
+    *,
+    on_clone_fallback: Callable[[], None] | None = None,
+) -> None:
     if try_clone_file(source, destination):
         return
+    if on_clone_fallback is not None:
+        on_clone_fallback()
     shutil.copy2(source, destination)
 
 

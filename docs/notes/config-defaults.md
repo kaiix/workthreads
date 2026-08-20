@@ -14,6 +14,7 @@ This note is the design record for built-in `wt` defaults, the generated `wt con
 | `defaults.base` | unset | Lets `wt` infer the repository's default base ref instead of assuming every repo uses the same branch name. |
 | `defaults.fetch` | `true` | Keeps remote base refs fresh before creating a worktree. `--no-fetch` remains the one-command opt-out for offline or latency-sensitive cases. |
 | `defaults.copyLocal` | `false` | Avoids silently copying large ignored directories, secrets, scratch files, or local experiments into every new worktree. |
+| `defaults.copyExclude` | `[]` | Lets users omit selected dependency directories, caches, logs, or other paths from every local-copy mode. |
 | `defaults.deleteBranch` | `false` | Keeps branch deletion explicit and avoids losing unmerged commits as a side effect of deleting a worktree. |
 | `shell.cdAfterAdd` | `true` | Matches the interactive shell workflow: after creating a worktree, the next likely action is to work inside it. This only takes effect when full shell integration is active. |
 
@@ -27,6 +28,7 @@ For a developer who frequently creates short-lived worktrees and wants them read
 [defaults]
 fetch = true
 copyLocal = true
+copyExclude = [".venv/", "node_modules/", ".cache/"]
 deleteBranch = false
 
 [shell]
@@ -41,13 +43,14 @@ A fresh Git worktree often cannot run the app because ignored local files like `
 
 That convenience is risky as a universal default because ignored and untracked files can include very large directories, stale build artifacts, secrets, or files the user intentionally did not want duplicated. The safest built-in default is therefore `false`, with README guidance that explains when to enable it.
 
+`defaults.copyExclude` narrows any local-copy mode using root-level Git-ignore patterns. It defaults to an empty array, applies to ignored and untracked selections before copying, and cannot re-enable built-in safety exclusions. See [local copy exclusions](copy-exclusions.md) for the full contract.
+
 Future mitigations if `copyLocal` becomes more opinionated:
 
 - Pre-scan selected files before copying and report counts plus total size.
 - Prompt in interactive terminals when the selection crosses a large-file or large-total-size threshold.
 - Fail non-interactively with a clear hint when a configured threshold is exceeded.
 - Provide an explicit override for scripts.
-- Add configurable exclude patterns for dependency directories, build outputs, caches, and logs.
 
 Avoid prompting on every `copyLocal` run; threshold-based prompts preserve the happy path.
 
@@ -117,6 +120,7 @@ wt config get defaults.worktreesDir
 wt config set defaults.worktreesDir ../external-worktrees
 wt config set defaults.base origin/main
 wt config set defaults.copyLocal true
+wt config set defaults.copyExclude '[".venv/", "node_modules/", ".cache/"]'
 wt config set hooks.postCreate /absolute/path/to/post-create.sh
 wt config set shell.cdAfterAdd true
 wt config unset hooks.postCreate

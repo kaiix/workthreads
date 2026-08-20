@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from conftest import init_repo, run_command, run_git, run_wt
 
 
@@ -61,6 +63,85 @@ def test_add_list_and_delete_worktree_with_copy_and_hooks(tmp_path: Path, wt_env
         cwd=repo,
     )
     assert missing_branch.returncode != 0
+
+
+def test_add_copy_local_applies_configured_exclusions(tmp_path: Path, wt_env: dict[str, str]) -> None:
+    repo = init_repo(tmp_path / "repo")
+    (repo / ".gitignore").write_text(".env.local\ncache/\n", encoding="utf-8")
+    (repo / "wt.toml").write_text(
+        "[defaults]\n"
+        "fetch = false\n"
+        "copyLocal = true\n"
+        'copyExclude = ["cache/", "*.log"]\n',
+        encoding="utf-8",
+    )
+    run_git(["add", ".gitignore"], cwd=repo)
+    run_git(["add", "-f", "wt.toml"], cwd=repo)
+    run_git(["commit", "-m", "configure local copying"], cwd=repo)
+
+    (repo / ".env.local").write_text("TOKEN=local\n", encoding="utf-8")
+    (repo / "cache").mkdir()
+    (repo / "cache" / "data.bin").write_text("cache\n", encoding="utf-8")
+    (repo / "notes.txt").write_text("scratch\n", encoding="utf-8")
+    (repo / "debug.log").write_text("log\n", encoding="utf-8")
+    destination = tmp_path / "threads" / "copy-excludes"
+
+    add = run_wt(
+        ["add", "feature/copy-excludes", "--base", "HEAD", "--path", str(destination)],
+        cwd=repo,
+        env=wt_env,
+    )
+
+    assert add.returncode == 0, add.stderr
+    assert "copied: ignored=1 untracked=1" in add.stdout
+    assert (destination / ".env.local").read_text(encoding="utf-8") == "TOKEN=local\n"
+    assert (destination / "notes.txt").read_text(encoding="utf-8") == "scratch\n"
+    assert not (destination / "cache").exists()
+    assert not (destination / "debug.log").exists()
+
+
+@pytest.mark.parametrize(
+    ("flag", "copied_name", "other_category_name"),
+    [
+        ("--copy-ignored", ".env.local", "notes.txt"),
+        ("--copy-untracked", "notes.txt", ".env.local"),
+    ],
+)
+def test_add_granular_copy_modes_apply_configured_exclusions(
+    tmp_path: Path,
+    wt_env: dict[str, str],
+    flag: str,
+    copied_name: str,
+    other_category_name: str,
+) -> None:
+    repo = init_repo(tmp_path / "repo")
+    (repo / ".gitignore").write_text(".env.local\nignored.omit\n", encoding="utf-8")
+    (repo / "wt.toml").write_text(
+        '[defaults]\nfetch = false\ncopyExclude = ["*.omit"]\n',
+        encoding="utf-8",
+    )
+    run_git(["add", ".gitignore"], cwd=repo)
+    run_git(["add", "-f", "wt.toml"], cwd=repo)
+    run_git(["commit", "-m", "configure granular local copying"], cwd=repo)
+
+    (repo / ".env.local").write_text("TOKEN=local\n", encoding="utf-8")
+    (repo / "ignored.omit").write_text("ignored\n", encoding="utf-8")
+    (repo / "notes.txt").write_text("scratch\n", encoding="utf-8")
+    (repo / "scratch.omit").write_text("untracked\n", encoding="utf-8")
+    mode = flag.removeprefix("--copy-")
+    destination = tmp_path / "threads" / mode
+
+    add = run_wt(
+        ["add", f"feature/{mode}", "--base", "HEAD", "--path", str(destination), flag],
+        cwd=repo,
+        env=wt_env,
+    )
+
+    assert add.returncode == 0, add.stderr
+    assert (destination / copied_name).exists()
+    assert not (destination / other_category_name).exists()
+    assert not (destination / "ignored.omit").exists()
+    assert not (destination / "scratch.omit").exists()
 
 
 def test_delete_current_linked_worktree_without_target(tmp_path: Path, wt_env: dict[str, str]) -> None:

@@ -283,6 +283,11 @@ def handle_add(args: argparse.Namespace) -> int:
         copy_ignored=copy_ignored,
         copy_untracked=copy_untracked,
         exclude_paths=local_copy_exclude_paths(repo, config),
+        exclude_patterns=(
+            config.get_str_list("defaults.copyExclude")
+            if copy_ignored or copy_untracked
+            else ()
+        ),
     )
 
     created = False
@@ -300,6 +305,10 @@ def handle_add(args: argparse.Namespace) -> int:
                     destination,
                     selection,
                     overwrite=args.overwrite,
+                    on_clone_fallback=lambda: output.print_warning(
+                        "COW clone unavailable; using regular file copying, "
+                        "which is slower and may use additional disk space."
+                    ),
                 )
         else:
             copied = copy_module.CopyCounts()
@@ -897,7 +906,10 @@ def handle_config(args: argparse.Namespace) -> int:
     persisted = config_module.read_toml(path) if path.exists() else {}
 
     if args.config_action == "set":
-        config_module.set_nested(persisted, args.key, config_module.parse_config_value(args.value))
+        value = config_module.parse_config_value(args.value)
+        if args.key == "defaults.copyExclude":
+            config_module.require_str_list(args.key, value)
+        config_module.set_nested(persisted, args.key, value)
         config_module.write_config_file(path, persisted)
         return int(ExitCode.SUCCESS)
 
@@ -932,6 +944,7 @@ CONFIG_DESCRIPTIONS = {
     "defaults.base": "Ref used when --base is not provided.",
     "defaults.fetch": "Fetch the base remote before creating a worktree.",
     "defaults.copyLocal": "Copy ignored and untracked local files into new worktrees.",
+    "defaults.copyExclude": "Git-ignore patterns omitted from all local-copy modes.",
     "defaults.deleteBranch": "Delete the local branch when deleting a worktree.",
     "hooks.postCreate": "Command or script run after creating a worktree.",
     "hooks.preDelete": "Command or script run before deleting a worktree.",
@@ -1065,6 +1078,8 @@ def print_config_table(rows: list[tuple[str, object]]) -> None:
 def format_config_value(value: object) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
+    if isinstance(value, list):
+        return config_module.format_toml_value(value)
     if value is None:
         return ""
     return str(value)

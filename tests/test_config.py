@@ -9,6 +9,7 @@ EXPECTED_BUILTIN_DEFAULTS = {
     "defaults.worktreesDir": ".worktrees",
     "defaults.fetch": "true",
     "defaults.copyLocal": "false",
+    "defaults.copyExclude": "[]",
     "defaults.deleteBranch": "false",
     "shell.cdAfterAdd": "true",
 }
@@ -65,6 +66,7 @@ def test_config_init_path_and_edit_use_config_files(tmp_path: Path, wt_env: dict
     assert 'worktreesDir = ".worktrees"' in config_text
     assert "fetch = true" in config_text
     assert "copyLocal = false" in config_text
+    assert "copyExclude = []" in config_text
     assert "deleteBranch = false" in config_text
     assert "cdAfterAdd = true" in config_text
 
@@ -87,3 +89,58 @@ def test_config_init_path_and_edit_use_config_files(tmp_path: Path, wt_env: dict
     assert edit_result.returncode == 0
     assert edit_result.stdout.strip() == str(global_config)
     assert global_config.exists()
+
+
+def test_config_set_reads_and_preserves_copy_exclude_array(tmp_path: Path, wt_env: dict[str, str]) -> None:
+    repo = init_repo(tmp_path / "repo")
+
+    set_excludes = run_wt(
+        ["config", "set", "defaults.copyExclude", '["node_modules/", "*.log"]'],
+        cwd=repo,
+        env=wt_env,
+    )
+    set_fetch = run_wt(["config", "set", "defaults.fetch", "false"], cwd=repo, env=wt_env)
+    get_excludes = run_wt(["config", "get", "defaults.copyExclude"], cwd=repo, env=wt_env)
+
+    assert set_excludes.returncode == 0, set_excludes.stderr
+    assert set_fetch.returncode == 0, set_fetch.stderr
+    assert get_excludes.returncode == 0, get_excludes.stderr
+    assert get_excludes.stdout.strip() == '["node_modules/", "*.log"]'
+    assert 'copyExclude = ["node_modules/", "*.log"]' in (repo / "wt.toml").read_text(encoding="utf-8")
+
+    invalid = run_wt(
+        ["config", "set", "defaults.copyExclude", "[1]"],
+        cwd=repo,
+        env=wt_env,
+    )
+    unchanged = run_wt(["config", "get", "defaults.copyExclude"], cwd=repo, env=wt_env)
+
+    assert invalid.returncode == 2
+    assert "defaults.copyExclude must be an array of strings" in invalid.stderr
+    assert unchanged.stdout.strip() == '["node_modules/", "*.log"]'
+
+
+def test_repo_copy_exclude_replaces_global_array(tmp_path: Path, wt_env: dict[str, str]) -> None:
+    repo = init_repo(tmp_path / "repo")
+    global_config = Path(wt_env["XDG_CONFIG_HOME"]) / "workthreads" / "config.toml"
+    global_config.parent.mkdir(parents=True)
+    global_config.write_text('[defaults]\ncopyExclude = ["*.log"]\n', encoding="utf-8")
+    (repo / "wt.toml").write_text('[defaults]\ncopyExclude = ["cache/"]\n', encoding="utf-8")
+
+    result = run_wt(["config", "get", "defaults.copyExclude"], cwd=repo, env=wt_env)
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == '["cache/"]'
+
+
+def test_add_rejects_non_array_copy_exclude_config(tmp_path: Path, wt_env: dict[str, str]) -> None:
+    repo = init_repo(tmp_path / "repo")
+    (repo / "wt.toml").write_text(
+        '[defaults]\nfetch = false\ncopyLocal = true\ncopyExclude = "cache/"\n',
+        encoding="utf-8",
+    )
+
+    result = run_wt(["add", "feature/invalid-excludes", "--base", "HEAD"], cwd=repo, env=wt_env)
+
+    assert result.returncode == 2
+    assert "defaults.copyExclude must be an array of strings" in result.stderr

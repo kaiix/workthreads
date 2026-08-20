@@ -77,6 +77,7 @@ Recommended local workflow:
 [defaults]
 fetch = true
 copyLocal = true
+copyExclude = [".venv/", "node_modules/", ".cache/"]
 deleteBranch = false
 
 [shell]
@@ -84,6 +85,8 @@ cdAfterAdd = true
 ```
 
 Keep `copyLocal = false` if you do not want local ignored and untracked files copied automatically. Enable it when fresh worktrees usually need local setup files such as `.env`, editor config, generated credentials, or scratch project config before the app can run.
+
+Use `copyExclude` to omit dependency directories, caches, logs, or other local files from every copy mode. Each entry uses root-level Git-ignore semantics, including directory patterns, `**`, and ordered `!` negation. Repo config replaces the global exclusion array.
 
 Create a worktree:
 

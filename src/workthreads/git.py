@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 import os
@@ -254,4 +255,12 @@ def ignored_files(cwd: Path | str) -> list[Path]:
 
 def untracked_files(cwd: Path | str) -> list[Path]:
     result = run_git(["ls-files", "--others", "--exclude-standard"], cwd=cwd)
+    return [Path(line) for line in result.stdout.splitlines() if line.strip()]
+
+
+def files_matching_exclude_patterns(cwd: Path | str, patterns: Iterable[str]) -> list[Path]:
+    exclude_args = [f"--exclude={pattern}" for pattern in patterns]
+    if not exclude_args:
+        return []
+    result = run_git(["ls-files", "--others", "--ignored", *exclude_args], cwd=cwd)
     return [Path(line) for line in result.stdout.splitlines() if line.strip()]

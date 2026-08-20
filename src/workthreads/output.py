@@ -32,6 +32,15 @@ def print_line(text: str = "", *, stderr: bool = False) -> None:
     print(text, file=stream)
 
 
+def print_warning(message: str) -> None:
+    text = f"warning: {message}"
+    rich_console = console(stderr=True)
+    if rich_console is None or not rich_console.is_terminal:
+        print_line(text, stderr=True)
+        return
+    rich_console.print(text, style="bold yellow", highlight=False)
+
+
 def print_error(error: WTError) -> None:
     print_line(f"error: {error.message}", stderr=True)
     if error.hint:

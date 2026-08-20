@@ -58,6 +58,12 @@ Document: [local-file-copying.md](notes/local-file-copying.md)
 
 Use when changing `--copy-local`, granular copy flags, overwrite behavior, or copy implementation.
 
+### Copy exclusions
+
+Document: [copy-exclusions.md](notes/copy-exclusions.md)
+
+Use when implementing or changing `defaults.copyExclude`, its Git-ignore pattern semantics, config behavior, or copy filtering.
+
 ## Hooks
 
 ### Lifecycle hooks

@@ -29,6 +29,35 @@ def test_select_and_copy_ignored_and_untracked_files(tmp_path: Path) -> None:
     assert (destination / "notes.txt").read_text(encoding="utf-8") == "scratch\n"
 
 
+def test_copy_exclude_patterns_support_negation_and_root_anchoring(tmp_path: Path) -> None:
+    repo = init_repo(tmp_path / "repo")
+    (repo / "tmp").mkdir()
+    (repo / "tmp" / "root.txt").write_text("exclude\n", encoding="utf-8")
+    (repo / "nested" / "tmp").mkdir(parents=True)
+    (repo / "nested" / "tmp" / "nested.txt").write_text("keep\n", encoding="utf-8")
+    (repo / "nested" / "deep" / "drop.generated").parent.mkdir(parents=True)
+    (repo / "nested" / "deep" / "drop.generated").write_text("exclude\n", encoding="utf-8")
+    (repo / "debug.copyexclude").write_text("exclude\n", encoding="utf-8")
+    (repo / "important.copyexclude").write_text("keep\n", encoding="utf-8")
+
+    selection = select_local_files(
+        repo,
+        copy_ignored=False,
+        copy_untracked=True,
+        exclude_patterns=(
+            "/tmp/",
+            "nested/**/drop.generated",
+            "*.copyexclude",
+            "!important.copyexclude",
+        ),
+    )
+
+    assert selection.files == {
+        Path("important.copyexclude"): "untracked",
+        Path("nested/tmp/nested.txt"): "untracked",
+    }
+
+
 def test_select_local_files_skips_default_worktrees_directory(tmp_path: Path) -> None:
     repo = init_repo(tmp_path / "repo")
     (repo / ".gitignore").write_text(".env.local\n.worktrees/\n", encoding="utf-8")
@@ -42,7 +71,12 @@ def test_select_local_files_skips_default_worktrees_directory(tmp_path: Path) ->
     destination = tmp_path / "destination"
     destination.mkdir()
 
-    selection = select_local_files(repo, copy_ignored=True, copy_untracked=True)
+    selection = select_local_files(
+        repo,
+        copy_ignored=True,
+        copy_untracked=True,
+        exclude_patterns=("!.worktrees/",),
+    )
     counts = copy_selected_files(repo, destination, selection, overwrite=False)
 
     assert selection.files == {Path(".env.local"): "ignored"}

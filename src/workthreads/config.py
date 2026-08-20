@@ -16,6 +16,7 @@ BUILTIN_CONFIG: dict[str, dict[str, object]] = {
         "base": None,
         "fetch": True,
         "copyLocal": False,
+        "copyExclude": [],
         "deleteBranch": False,
     },
     "hooks": {
@@ -57,6 +58,15 @@ class Config:
     def get_int(self, key: str) -> int:
         value = self.get(key, 0)
         return int(value) if isinstance(value, int | str) and str(value).isdigit() else 0
+
+    def get_str_list(self, key: str) -> list[str]:
+        return require_str_list(key, self.get(key, []))
+
+
+def require_str_list(key: str, value: object) -> list[str]:
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise UsageError(f"{key} must be an array of strings")
+    return list(value)
 
 
 def global_config_path() -> Path:
@@ -133,6 +143,11 @@ def parse_config_value(raw: str) -> object:
         return False
     if raw.isdigit():
         return int(raw)
+    if raw.startswith("["):
+        try:
+            return tomllib.loads(f"value = {raw}\n")["value"]
+        except tomllib.TOMLDecodeError as error:
+            raise UsageError("invalid TOML array", details=str(error)) from error
     return raw
 
 
@@ -163,6 +178,9 @@ fetch = true
 # Copy ignored and untracked local files into new worktrees.
 # Enable when new worktrees need local setup files.
 copyLocal = false
+
+# Git-ignore patterns omitted from all local-copy modes.
+copyExclude = []
 
 # Delete the local branch when deleting a worktree.
 # Keep false unless branch deletion is an intentional workflow default.
@@ -208,6 +226,8 @@ def format_toml_value(value: object) -> str:
         return "true" if value else "false"
     if isinstance(value, int):
         return str(value)
+    if isinstance(value, list):
+        return f"[{', '.join(format_toml_value(item) for item in value)}]"
     escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'
 
