@@ -229,6 +229,8 @@ def handle_add(args: argparse.Namespace) -> int:
 
     existing = find_worktree_by_branch(repo.worktrees, args.branch)
     if existing:
+        if not git.is_worktree_available(existing):
+            raise unavailable_worktree_error(existing)
         write_cd_target(existing.path, cd_requested)
         print_add_result(
             branch=args.branch,
@@ -451,6 +453,8 @@ def handle_delete(args: argparse.Namespace) -> int:
 
     if target.path.resolve() == repo.main_root.resolve():
         raise SafetyError("refusing to delete the main worktree")
+    if not git.is_worktree_available(target):
+        raise unavailable_worktree_error(target)
 
     dirty = git.is_dirty(target.path)
     force_remove = args.force
@@ -602,6 +606,22 @@ def find_worktree_by_branch(worktrees: list[git.Worktree], branch: str) -> git.W
     return None
 
 
+def unavailable_worktree_error(worktree: git.Worktree) -> WTError:
+    details = f"path: {worktree.path}"
+    if worktree.prunable_reason:
+        details = append_details(details, f"reason: {worktree.prunable_reason}")
+    hint = (
+        "run `git worktree prune` to remove stale metadata"
+        if worktree.is_prunable
+        else "restore the path or inspect it with `git worktree list --porcelain`"
+    )
+    return WTError(
+        f"worktree is unavailable: {worktree.branch or worktree.name}",
+        hint=hint,
+        details=details,
+    )
+
+
 def handle_list(args: argparse.Namespace) -> int:
     repo = git.require_repo(Path.cwd())
     meta = metadata.metadata_by_path(repo.main_root)
@@ -615,22 +635,40 @@ def handle_list(args: argparse.Namespace) -> int:
                 "head": worktree.head,
                 "base": entry.base if entry else None,
                 "isMain": worktree.path.resolve() == repo.main_root.resolve(),
-                "dirty": git.is_dirty(worktree.path),
+                "status": worktree_status(worktree),
             }
         )
 
     print_worktree_table(rows)
+    statuses = {row["status"] for row in rows}
+    if "prunable" in statuses:
+        output.print_warning("stale worktree metadata found; run `git worktree prune`")
+    if "missing" in statuses:
+        output.print_warning("one or more worktree paths are unavailable")
     return int(ExitCode.SUCCESS)
 
 
+def worktree_status(worktree: git.Worktree) -> str:
+    if worktree.is_prunable:
+        return "prunable"
+    if not git.is_worktree_available(worktree):
+        return "missing"
+    try:
+        return "dirty" if git.is_dirty(worktree.path) else "clean"
+    except WTError:
+        if not git.is_worktree_available(worktree):
+            return "missing"
+        raise
+
+
 def print_worktree_table(rows: list[dict[str, Any]]) -> None:
-    output.print_line(f"{'BRANCH':<28} {'PATH':<40} {'BASE':<20} DIRTY")
+    output.print_line(f"{'BRANCH':<28} {'PATH':<40} {'BASE':<20} STATUS")
     for row in rows:
         branch = row["branch"] or "(detached)"
         path = row["path"]
         base = row["base"] or "-"
-        dirty = "yes" if row["dirty"] else "no"
-        output.print_line(f"{branch:<28} {path:<40} {base:<20} {dirty}")
+        status = row["status"]
+        output.print_line(f"{branch:<28} {path:<40} {base:<20} {status}")
 
 
 @dataclass(frozen=True)
@@ -699,7 +737,11 @@ def handle_complete_args(argv: list[str]) -> int:
 
 def worktree_candidates(repo: git.RepoContext, config: config_module.Config) -> list[WorktreeCandidate]:
     root = worktrees_root(repo.main_root, config)
-    return [worktree_candidate(worktree, repo.main_root, root) for worktree in repo.worktrees]
+    return [
+        worktree_candidate(worktree, repo.main_root, root)
+        for worktree in repo.worktrees
+        if git.is_worktree_available(worktree)
+    ]
 
 
 def worktree_candidate(worktree: git.Worktree, repo_root: Path, worktrees_dir: Path | None) -> WorktreeCandidate:

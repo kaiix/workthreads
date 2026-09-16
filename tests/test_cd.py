@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 
-from conftest import init_repo, run_wt
+from conftest import init_repo, run_git, run_wt
 
 
 def add_worktree(repo: Path, env: dict[str, str], branch: str, destination: Path) -> None:
@@ -55,6 +56,18 @@ def test_cd_reports_unknown_target(tmp_path: Path, wt_env: dict[str, str]) -> No
     assert result.returncode == 2
     assert "unknown worktree: missing" in result.stderr
     assert "run wt list" in result.stderr
+
+
+def test_cd_ignores_prunable_worktree(tmp_path: Path, wt_env: dict[str, str]) -> None:
+    repo = init_repo(tmp_path / "repo")
+    destination = tmp_path / "threads" / "stale"
+    run_git(["worktree", "add", "-b", "feature/stale", str(destination), "HEAD"], cwd=repo)
+    shutil.rmtree(destination)
+
+    result = run_wt(["cd", "feature/stale"], cwd=repo, env=wt_env)
+
+    assert result.returncode == 2
+    assert "unknown worktree: feature/stale" in result.stderr
 
 
 def test_cd_writes_shell_target_without_printing_path(tmp_path: Path, wt_env: dict[str, str]) -> None:

@@ -24,12 +24,17 @@ class Worktree:
     branch: str | None = None
     detached: bool = False
     bare: bool = False
+    prunable_reason: str | None = None
 
     @property
     def name(self) -> str:
         if self.branch:
             return self.branch.rsplit("/", 1)[-1]
         return self.path.name
+
+    @property
+    def is_prunable(self) -> bool:
+        return self.prunable_reason is not None
 
 
 @dataclass(frozen=True)
@@ -67,16 +72,21 @@ def run_command(
     if env:
         merged_env.update(env)
 
-    completed = subprocess.run(
-        args,
-        cwd=str(cwd) if cwd is not None else None,
-        env=merged_env,
-        input=input_text,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=False,
-    )
+    command = " ".join(args)
+    try:
+        completed = subprocess.run(
+            args,
+            cwd=str(cwd) if cwd is not None else None,
+            env=merged_env,
+            input=input_text,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+    except OSError as error:
+        raise WTError(f"failed to run command: {command}", details=str(error)) from error
+
     result = CommandResult(
         args=args,
         returncode=completed.returncode,
@@ -84,7 +94,6 @@ def run_command(
         stderr=completed.stderr,
     )
     if check and result.returncode != 0:
-        command = " ".join(args)
         raise WTError(
             f"command failed: {command}",
             details=(result.stderr or result.stdout).strip() or None,
@@ -151,6 +160,11 @@ def parse_worktree_porcelain(output: str) -> list[Worktree]:
                 branch=current.get("branch") if isinstance(current.get("branch"), str) else None,
                 detached=bool(current.get("detached", False)),
                 bare=bool(current.get("bare", False)),
+                prunable_reason=(
+                    current.get("prunable_reason")
+                    if isinstance(current.get("prunable_reason"), str)
+                    else None
+                ),
             )
         )
         current = {}
@@ -173,9 +187,17 @@ def parse_worktree_porcelain(output: str) -> list[Worktree]:
             current["detached"] = True
         elif line == "bare":
             current["bare"] = True
+        elif line == "prunable":
+            current["prunable_reason"] = ""
+        elif line.startswith("prunable "):
+            current["prunable_reason"] = line.removeprefix("prunable ")
     if current:
         flush()
     return worktrees
+
+
+def is_worktree_available(worktree: Worktree) -> bool:
+    return not worktree.is_prunable and worktree.path.is_dir()
 
 
 def branch_exists(branch: str, cwd: Path | str) -> bool:

@@ -101,10 +101,12 @@ Scripts should not rely on progress text or spinner frames. They should continue
 Default output should be readable:
 
 ```text
-BRANCH                  PATH                                      BASE
-feature/payment-retry   /repo/.worktrees/feature/payment-retry    origin/main
-feature/webhook-audit   /repo/.worktrees/feature/webhook-audit    origin/main
+BRANCH                  PATH                                      BASE          STATUS
+feature/payment-retry   /repo/.worktrees/feature/payment-retry    origin/main   clean
+feature/webhook-audit   /repo/.worktrees/feature/webhook-audit    origin/main   dirty
 ```
+
+Worktree registrations whose paths have been removed are shown with `prunable` status. Listing remains side-effect free and succeeds while warning that `git worktree prune` can remove the stale metadata. Unavailable worktrees are excluded from `wt cd` and shell completion.
 
 ## Exit codes
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 
 import pytest
 
@@ -63,6 +64,36 @@ def test_add_list_and_delete_worktree_with_copy_and_hooks(tmp_path: Path, wt_env
         cwd=repo,
     )
     assert missing_branch.returncode != 0
+
+
+def test_list_reports_prunable_worktree_without_failing(tmp_path: Path, wt_env: dict[str, str]) -> None:
+    repo = init_repo(tmp_path / "repo")
+    destination = tmp_path / "threads" / "stale"
+    run_git(["worktree", "add", "-b", "feature/stale", str(destination), "HEAD"], cwd=repo)
+    shutil.rmtree(destination)
+
+    listed = run_wt(["list"], cwd=repo, env=wt_env)
+
+    assert listed.returncode == 0, listed.stderr
+    assert str(repo) in listed.stdout
+    assert str(destination) in listed.stdout
+    assert "prunable" in listed.stdout
+    assert "git worktree prune" in listed.stderr
+    assert "Traceback" not in listed.stderr
+
+
+def test_delete_reports_prunable_worktree(tmp_path: Path, wt_env: dict[str, str]) -> None:
+    repo = init_repo(tmp_path / "repo")
+    destination = tmp_path / "threads" / "stale"
+    run_git(["worktree", "add", "-b", "feature/stale", str(destination), "HEAD"], cwd=repo)
+    shutil.rmtree(destination)
+
+    deleted = run_wt(["delete", "feature/stale"], cwd=repo, env=wt_env)
+
+    assert deleted.returncode == 1
+    assert "worktree is unavailable: feature/stale" in deleted.stderr
+    assert "git worktree prune" in deleted.stderr
+    assert "Traceback" not in deleted.stderr
 
 
 def test_add_copy_local_applies_configured_exclusions(tmp_path: Path, wt_env: dict[str, str]) -> None:
