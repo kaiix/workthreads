@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import os
+import tomllib
 
 from conftest import init_repo, run_wt
 
@@ -32,9 +33,14 @@ def test_hooks_helpers_manage_repo_local_scripts(tmp_path: Path, wt_env: dict[st
     assert configured_hook.stdout.strip() == str(post_create)
 
 
-def test_hooks_edit_prints_path_without_editor(tmp_path: Path, wt_env: dict[str, str]) -> None:
+def test_hooks_edit_prints_path_without_editor_and_configures_hook(
+    tmp_path: Path, wt_env: dict[str, str]
+) -> None:
     repo = init_repo(tmp_path / "repo")
+    hook_path = repo / ".git" / "workthreads" / "hooks" / "pre-delete.sh"
     result = run_wt(["hooks", "edit", "pre-delete"], cwd=repo, env=wt_env)
 
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == str(repo / ".git" / "workthreads" / "hooks" / "pre-delete.sh")
+    assert result.stdout.strip() == str(hook_path)
+    config = tomllib.loads((repo / "wt.toml").read_text(encoding="utf-8"))
+    assert config["hooks"]["preDelete"] == str(hook_path)

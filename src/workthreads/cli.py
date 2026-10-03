@@ -1010,7 +1010,7 @@ def handle_hooks(args: argparse.Namespace) -> int:
 
     if args.hooks_action == "init":
         created = init_hook_templates(repo)
-        configure_hook_paths(repo)
+        configure_hook_paths(repo, HOOK_CONFIG_KEYS)
         output.print_line(f"hook dir: {hook_dir}")
         for hook_name, path in created.items():
             output.print_line(f"{hook_name}: {path}")
@@ -1019,6 +1019,7 @@ def handle_hooks(args: argparse.Namespace) -> int:
 
     if args.hooks_action == "edit":
         path = ensure_hook_template(repo, args.hook)
+        configure_hook_paths(repo, (args.hook,))
         editor = os.environ.get("VISUAL") or os.environ.get("EDITOR")
         if not editor:
             output.print_line(str(path))
@@ -1088,11 +1089,11 @@ set -eu
     raise UsageError(f"unknown hook: {hook_name}")
 
 
-def configure_hook_paths(repo: git.RepoContext) -> None:
+def configure_hook_paths(repo: git.RepoContext, hook_names: Iterable[str]) -> None:
     path = config_module.writable_config_path(repo.main_root)
     persisted = config_module.read_toml(path) if path.exists() else {}
-    for hook_name, key in HOOK_CONFIG_KEYS.items():
-        config_module.set_nested(persisted, key, str(hook_path(repo, hook_name)))
+    for hook_name in hook_names:
+        config_module.set_nested(persisted, HOOK_CONFIG_KEYS[hook_name], str(hook_path(repo, hook_name)))
     config_module.write_config_file(path, persisted)
 
 
