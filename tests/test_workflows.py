@@ -237,3 +237,23 @@ def test_add_copy_local_skips_configured_worktrees_directory(tmp_path: Path, wt_
     assert add.stdout.splitlines()[-1] == str(destination)
     assert (destination / ".env.local").read_text(encoding="utf-8") == "TOKEN=local\n"
     assert not (destination / "threads").exists()
+
+
+def test_add_copy_local_skips_existing_worktree_at_custom_path(tmp_path: Path, wt_env: dict[str, str]) -> None:
+    repo = init_repo(tmp_path / "repo")
+    (repo / ".git" / "info" / "exclude").write_text("/scratch/previous/\n", encoding="utf-8")
+    previous = repo / "scratch" / "previous"
+    run_git(["worktree", "add", "-b", "previous", str(previous), "HEAD"], cwd=repo)
+    (previous / "local.txt").write_text("only for previous\n", encoding="utf-8")
+    (previous.parent / "previous-notes.txt").write_text("keep\n", encoding="utf-8")
+    destination = tmp_path / "new-worktree"
+
+    add = run_wt(
+        ["add", "feature/new", "--base", "HEAD", "--path", str(destination), "--copy-local"],
+        cwd=repo,
+        env=wt_env,
+    )
+
+    assert add.returncode == 0, add.stderr
+    assert not (destination / "scratch" / "previous").exists()
+    assert (destination / "scratch" / "previous-notes.txt").read_text(encoding="utf-8") == "keep\n"

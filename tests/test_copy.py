@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from conftest import init_repo, run_git
@@ -75,10 +76,13 @@ def test_select_local_files_skips_default_worktrees_directory(tmp_path: Path) ->
         repo,
         copy_ignored=True,
         copy_untracked=True,
+        exclude_paths=(Path(".worktrees"), Path(".worktrees/feature-demo")),
         exclude_patterns=("!.worktrees/",),
     )
     counts = copy_selected_files(repo, destination, selection, overwrite=False)
 
+    if os.name != "nt":
+        assert selection.exclude_paths == ()
     assert selection.files == {Path(".env.local"): "ignored"}
     assert counts.ignored == 1
     assert counts.untracked == 0

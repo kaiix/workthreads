@@ -45,7 +45,11 @@ def select_local_files(
     exclude_patterns: Iterable[str] = (),
 ) -> CopySelection:
     files: dict[Path, str] = {}
-    normalized_exclude_paths = tuple(exclude_paths)
+    # Built-in exclusions already cover their descendants. On Windows, keep explicit
+    # paths because pathlib's case-insensitive matching can exclude additional paths.
+    normalized_exclude_paths = tuple(
+        path for path in exclude_paths if os.name == "nt" or should_copy(path)
+    )
     excluded_files = (
         set(git.files_matching_exclude_patterns(source_root, exclude_patterns))
         if copy_ignored or copy_untracked
