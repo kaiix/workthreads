@@ -6,16 +6,7 @@ Verified against: src/workthreads/copy.py, src/workthreads/cli.py, tests/test_co
 
 ## Purpose
 
-The common case is "make the new worktree feel like my current dev environment". Use:
-
-```bash
-wt add feature/payment-retry --copy-local
-```
-
-`--copy-local` means:
-
-- Copy ignored files.
-- Copy untracked files.
+By default, `wt add feature/payment-retry` copies ignored and untracked local files into the new worktree. `--copy-local` explicitly requests both categories, even when automatic copying is disabled.
 
 ## Flags
 
@@ -41,7 +32,7 @@ wt add feature/payment-retry --copy-local
 
 ## Default stance
 
-`defaults.copyLocal` is intentionally `false` by default. See [config defaults](config-defaults.md) for the rationale and future large-copy mitigation ideas.
+Set `defaults.copyLocal = false` to disable automatic copying. Explicit copy flags take precedence over this setting. See [config defaults](config-defaults.md) for the rationale and future large-copy mitigation ideas.
 
 ## Configurable exclusions
 

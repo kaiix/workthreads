@@ -37,9 +37,9 @@ creates:
 - `--base <ref>` has highest priority.
 - Then repo config.
 - Then global config.
-- Then inferred defaults such as `origin/main`, `origin/master`, `main`, `master`, or `HEAD`.
-- Before creation, validate that `<ref>^{commit}` exists.
+- If the resolved base is unset or `""`, use the first existing ref in this order: `origin/main`, `origin/master`, `main`, `master`, `HEAD`.
 - If fetching is enabled, fetch the remote implied by the base ref when possible.
+- Before creation, validate that `<ref>^{commit}` exists.
 - `--no-fetch` disables fetching when config enables `defaults.fetch`.
 
 ## Examples

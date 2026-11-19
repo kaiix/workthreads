@@ -12,7 +12,7 @@ The tool should not feel like a thin wrapper around `git worktree`. It should be
 
 - Start a new task in an isolated worktree.
 - Put that worktree exactly where the developer expects.
-- Bring over local-only project data when requested.
+- Bring over local-only project data by default, with configurable exclusions.
 - Run setup and cleanup scripts at lifecycle moments.
 - Delete the current worktree without making the developer restate obvious context.
 - Navigate between existing worktrees from the shell.
@@ -26,7 +26,7 @@ Developer experience is the first design constraint. Common actions should be sh
 | --- | --- |
 | Context-aware | Detect the repo root automatically. If `wt delete` is run inside a linked worktree, delete that current worktree by default. |
 | Short common path | Lead with `wt add <branch>`, `wt cd <target>`, `wt delete`, and `wt list`. |
-| Safe by default | Do not silently delete dirty worktrees. Do not overwrite copied files by default. Keep branch deletion explicit. |
+| Safety controls | Do not silently delete dirty worktrees or overwrite copied files. Use `--keep-branch` to retain the local branch when deleting a worktree. |
 | Human-friendly and scriptable | Default output should help humans. Successful commands keep stable plain-text contracts where scripts need them. |
 | Fixable errors | Errors should say what failed, why, and what to run next. |
 | Shell-native | Completion is part of the core workflow. Directory switching belongs to shell integration, not the standalone binary. |

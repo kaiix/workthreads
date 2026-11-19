@@ -7,10 +7,11 @@ from conftest import init_repo, run_wt
 
 EXPECTED_BUILTIN_DEFAULTS = {
     "defaults.worktreesDir": ".worktrees",
+    "defaults.base": "",
     "defaults.fetch": "true",
-    "defaults.copyLocal": "false",
+    "defaults.copyLocal": "true",
     "defaults.copyExclude": "[]",
-    "defaults.deleteBranch": "false",
+    "defaults.deleteBranch": "true",
     "shell.cdAfterAdd": "true",
 }
 
@@ -62,13 +63,13 @@ def test_config_init_path_and_edit_use_config_files(tmp_path: Path, wt_env: dict
     init_result = run_wt(["config", "init"], cwd=repo, env=wt_env)
     assert init_result.returncode == 0, init_result.stderr
     assert f"created config: {repo_config}" in init_result.stdout
-    config_text = repo_config.read_text(encoding="utf-8")
-    assert 'worktreesDir = ".worktrees"' in config_text
-    assert "fetch = true" in config_text
-    assert "copyLocal = false" in config_text
-    assert "copyExclude = []" in config_text
-    assert "deleteBranch = false" in config_text
-    assert "cdAfterAdd = true" in config_text
+    config_lines = repo_config.read_text(encoding="utf-8").splitlines()
+    assert 'worktreesDir = ".worktrees"' in config_lines
+    assert "fetch = true" in config_lines
+    assert "copyLocal = true" in config_lines
+    assert "copyExclude = []" in config_lines
+    assert "deleteBranch = true" in config_lines
+    assert "cdAfterAdd = true" in config_lines
 
     for key, expected in EXPECTED_BUILTIN_DEFAULTS.items():
         get_result = run_wt(["config", "get", key], cwd=repo, env=wt_env)

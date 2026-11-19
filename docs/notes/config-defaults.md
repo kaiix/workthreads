@@ -11,41 +11,37 @@ This note is the design record for built-in `wt` defaults, the generated `wt con
 | Key | Built-in and template value | Rationale |
 | --- | --- | --- |
 | `defaults.worktreesDir` | `.worktrees` | Gives a predictable repo-local location without requiring first-run setup. |
-| `defaults.base` | unset | Lets `wt` infer the repository's default base ref instead of assuming every repo uses the same branch name. |
+| `defaults.base` | Unset | Infers the base from the repository. Set a ref to override inference, or use `base = ""` in repo config to override a global base and infer instead. |
 | `defaults.fetch` | `true` | Keeps remote base refs fresh before creating a worktree. `--no-fetch` remains the one-command opt-out for offline or latency-sensitive cases. |
-| `defaults.copyLocal` | `false` | Avoids silently copying large ignored directories, secrets, scratch files, or local experiments into every new worktree. |
+| `defaults.copyLocal` | `true` | Brings ignored and untracked setup files into new worktrees automatically. |
 | `defaults.copyExclude` | `[]` | Lets users omit selected dependency directories, caches, logs, or other paths from every local-copy mode. |
-| `defaults.deleteBranch` | `false` | Keeps branch deletion explicit and avoids losing unmerged commits as a side effect of deleting a worktree. |
+| `defaults.deleteBranch` | `true` | Retires the corresponding local branch when a worktree is deleted. Use `--keep-branch` to retain it. |
 | `shell.cdAfterAdd` | `true` | Matches the interactive shell workflow: after creating a worktree, the next likely action is to work inside it. This only takes effect when full shell integration is active. |
 
 The built-in defaults and `wt config init` template should stay in lockstep. If one changes, update the other and the config tests.
 
-## Recommended local workflow
+## Example overrides
 
-For a developer who frequently creates short-lived worktrees and wants them ready to run immediately:
+If your repository uses `origin/main`, and you want to omit dependency directories and keep branches after deleting worktrees:
 
 ```toml
 [defaults]
-fetch = true
-copyLocal = true
+base = "origin/main"
 copyExclude = [".venv/", "node_modules/", ".cache/"]
 deleteBranch = false
-
-[shell]
-cdAfterAdd = true
 ```
 
-This keeps base refs fresh, copies local setup files when the user opts into that behavior, keeps branch deletion explicit, and enters new worktrees automatically when shell integration is installed.
+Explicit settings in existing config files are not changed when the built-in defaults change.
 
 ## `copyLocal` tradeoff
 
 A fresh Git worktree often cannot run the app because ignored local files like `.env`, local config, generated credentials, or scratch setup files are missing. `defaults.copyLocal = true` solves that by copying ignored and untracked local files into the new worktree.
 
-That convenience is risky as a universal default because ignored and untracked files can include very large directories, stale build artifacts, secrets, or files the user intentionally did not want duplicated. The safest built-in default is therefore `false`, with README guidance that explains when to enable it.
+Ignored and untracked files can also include large directories, stale build artifacts, or secrets. Set `defaults.copyLocal = false` to disable automatic copying, or use an explicit copy flag to select which categories to copy for one command.
 
 `defaults.copyExclude` narrows any local-copy mode using root-level Git-ignore patterns. It defaults to an empty array, applies to ignored and untracked selections before copying, and cannot re-enable built-in safety exclusions. See [local copy exclusions](copy-exclusions.md) for the full contract.
 
-Future mitigations if `copyLocal` becomes more opinionated:
+Possible mitigations for large copies:
 
 - Pre-scan selected files before copying and report counts plus total size.
 - Prompt in interactive terminals when the selection crosses a large-file or large-total-size threshold.
@@ -56,7 +52,7 @@ Avoid prompting on every `copyLocal` run; threshold-based prompts preserve the h
 
 ## `deleteBranch` tradeoff
 
-`defaults.deleteBranch = true` fits a "work thread" mental model where deleting a worktree retires the matching branch. It is not a safe built-in default yet because branch deletion is more destructive than removing the worktree directory.
+By default, deleting a worktree also retires the matching local branch. Use `--keep-branch` for a single deletion or set `defaults.deleteBranch = false` to keep branches by default. Branch deletion can affect unmerged commits even if the worktree itself is clean.
 
 Current `wt delete` behavior:
 
@@ -74,8 +70,6 @@ Deferred safety improvements:
 - If branch deletion comes from `defaults.deleteBranch = true`, print that config is causing the branch deletion.
 - Require interactive confirmation, or fail non-interactively with a clear override hint, before deleting a branch with unmerged commits.
 - Avoid force-deleting branches by default unless the user has explicitly confirmed the unmerged-commit case.
-
-For now, the built-in default should remain `deleteBranch = false`.
 
 ## Config file location
 

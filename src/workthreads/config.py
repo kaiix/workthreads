@@ -15,9 +15,9 @@ BUILTIN_CONFIG: dict[str, dict[str, object]] = {
         "worktreesDir": ".worktrees",
         "base": None,
         "fetch": True,
-        "copyLocal": False,
+        "copyLocal": True,
         "copyExclude": [],
-        "deleteBranch": False,
+        "deleteBranch": True,
     },
     "hooks": {
         "postCreate": None,
@@ -169,22 +169,21 @@ def default_config_template() -> str:
 # Parent directory for generated worktree paths. Relative paths are resolved from the main worktree.
 worktreesDir = ".worktrees"
 
-# Base ref used when --base is not provided. Leave commented to infer from the repository.
+# Optional base ref used when --base is not provided. Set to "" to force inference.
 # base = "origin/main"
 
 # Fetch the base remote before creating a worktree.
 fetch = true
 
 # Copy ignored and untracked local files into new worktrees.
-# Enable when new worktrees need local setup files.
-copyLocal = false
+copyLocal = true
 
 # Git-ignore patterns omitted from all local-copy modes.
 copyExclude = []
 
-# Delete the local branch when deleting a worktree.
-# Keep false unless branch deletion is an intentional workflow default.
-deleteBranch = false
+# Delete the local branch when deleting a worktree, even if it has unmerged commits.
+# Set to false to keep branches by default.
+deleteBranch = true
 
 [hooks]
 # Command or script run after creating a worktree.

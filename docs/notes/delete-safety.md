@@ -48,9 +48,9 @@ hint: run `wt delete <branch-or-path>` from the main worktree, or cd into a link
 
 Branch behavior:
 
-- Built-in default: keep the branch.
-- `--delete-branch` deletes the local branch after worktree removal.
-- `--keep-branch` keeps the local branch.
+- Built-in default: delete the local branch after worktree removal.
+- `--delete-branch` explicitly deletes the local branch.
+- `--keep-branch` keeps the local branch. Set `defaults.deleteBranch = false` to keep branches by default.
 - `--delete-branch` and `--keep-branch` are mutually exclusive.
 
 Success output:
@@ -58,7 +58,7 @@ Success output:
 ```text
 deleted worktree feature/payment-retry
 path: /repo/.worktrees/feature/payment-retry
-branch: kept
+branch: deleted
 ```
 
 No separate `wt trash` command exists in this design. If deletion safety needs a recovery mechanism, it should be expressed through the `wt delete` workflow and documented guarantees, not as a separate command with unclear semantics.

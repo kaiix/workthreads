@@ -191,18 +191,27 @@ def test_delete_current_linked_worktree_without_target(tmp_path: Path, wt_env: d
     assert cd_file.read_text(encoding="utf-8") == str(repo)
 
 
-def test_add_uses_default_dot_worktrees_directory(tmp_path: Path, wt_env: dict[str, str]) -> None:
+def test_add_and_delete_with_builtin_defaults(tmp_path: Path, wt_env: dict[str, str]) -> None:
+    remote = init_repo(tmp_path / "remote")
     repo = init_repo(tmp_path / "repo")
+    run_git(["remote", "add", "-f", "origin", str(remote)], cwd=repo)
+    run_git(["commit", "--allow-empty", "-m", "remote-only commit"], cwd=remote)
+    (repo / ".git" / "info" / "exclude").write_text(".env.local\n", encoding="utf-8")
+    (repo / ".env.local").write_text("TOKEN=local\n", encoding="utf-8")
+    (repo / "notes.txt").write_text("scratch\n", encoding="utf-8")
     destination = repo / ".worktrees" / "feature" / "default"
 
-    add = run_wt(["add", "feature/default", "--base", "HEAD"], cwd=repo, env=wt_env)
+    add = run_wt(["add", "feature/default"], cwd=repo, env=wt_env)
 
     assert add.returncode == 0, add.stderr
     assert add.stdout.splitlines()[-1] == str(destination)
-    assert destination.exists()
+    assert run_git(["rev-parse", "HEAD"], cwd=destination).stdout == run_git(["rev-parse", "HEAD"], cwd=remote).stdout
+    assert (destination / ".env.local").read_text(encoding="utf-8") == "TOKEN=local\n"
+    assert (destination / "notes.txt").read_text(encoding="utf-8") == "scratch\n"
 
-    deleted = run_wt(["delete", "feature/default", "--force", "--delete-branch"], cwd=repo, env=wt_env)
+    deleted = run_wt(["delete", "feature/default", "--force"], cwd=repo, env=wt_env)
     assert deleted.returncode == 0, deleted.stderr
+    assert run_git(["branch", "--list", "feature/default"], cwd=repo).stdout == ""
     assert not destination.exists()
     assert not (repo / ".worktrees" / "feature").exists()
     assert (repo / ".worktrees").exists()

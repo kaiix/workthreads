@@ -276,7 +276,9 @@ def handle_add(args: argparse.Namespace) -> int:
         )
     destination.parent.mkdir(parents=True, exist_ok=True)
 
-    copy_local = args.copy_local or config.get_bool("defaults.copyLocal")
+    copy_local = args.copy_local
+    if not (copy_local or args.copy_ignored or args.copy_untracked):
+        copy_local = config.get_bool("defaults.copyLocal")
     copy_ignored = args.copy_ignored or copy_local
     copy_untracked = args.copy_untracked or copy_local
 

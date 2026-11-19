@@ -69,24 +69,23 @@ wt config edit
 
 Repo configuration lives in `wt.toml` at the repository root. It can stay untracked for local workflow settings, or be committed only when the repo intentionally wants shared defaults. Use `wt config path` to print the active path.
 
-By default, `wt add feature/payment-retry` creates `.worktrees/feature/payment-retry` under the repo root. When the selected base ref belongs to a configured remote, `wt add` fetches that remote first; pass `--no-fetch` to skip this for one command.
+By default, `wt add feature/payment-retry` creates `.worktrees/feature/payment-retry` under the repo root. `wt add` fetches the remote for the selected base ref when that remote is configured; use `--no-fetch` to skip this for one command.
 
-Recommended local workflow:
+Built-in workflow defaults:
 
 ```toml
 [defaults]
 fetch = true
 copyLocal = true
-copyExclude = [".venv/", "node_modules/", ".cache/"]
-deleteBranch = false
+deleteBranch = true
 
 [shell]
 cdAfterAdd = true
 ```
 
-Keep `copyLocal = false` if you do not want local ignored and untracked files copied automatically. Enable it when fresh worktrees usually need local setup files such as `.env`, editor config, generated credentials, or scratch project config before the app can run.
+By default, `wt` infers the base from the repository. Set `defaults.base` to choose a ref or pass `--base` for one command. To override a global base and use inference in this repo, set `base = ""` in `wt.toml`.
 
-Use `copyExclude` to omit dependency directories, caches, logs, or other local files from every copy mode. Each entry uses root-level Git-ignore semantics, including directory patterns, `**`, and ordered `!` negation. Repo config replaces the global exclusion array.
+Ignored and untracked files (including files like `.env`) are copied by default. Set `copyLocal = false` to opt out, or use `copyExclude = [".venv/", "node_modules/", ".cache/"]` to omit selected files from every copy mode. Each entry uses root-level Git-ignore semantics, including directory patterns, `**`, and ordered `!` negation. Repo config replaces the global exclusion array.
 
 Create a worktree:
 
@@ -134,6 +133,8 @@ Delete a named worktree from elsewhere:
 ```bash
 wt delete feature/payment-retry
 ```
+
+`wt delete` also deletes the local branch by default, even if it has unmerged commits. Pass `--keep-branch` or set `defaults.deleteBranch = false` to keep it.
 
 ## Hooks
 
