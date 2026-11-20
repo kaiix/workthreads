@@ -24,7 +24,7 @@ By default, `wt add feature/payment-retry` copies ignored and untracked local fi
 - Never copy `.git/`.
 - Avoid copying nested worktrees, including the default `.worktrees/` directory and any configured `defaults.worktreesDir` that lives inside the source worktree.
 - Handle files, directories, and symlinks.
-- Use copy-on-write clone/reflink for regular files when the platform and filesystem support it; fall back to normal copy.
+- Use copy-on-write clone/reflink for regular files when the platform and filesystem support it; fall back to normal copy. On macOS, rely on `clonefile` to preserve regular-file metadata and restore set-ID bits separately when present.
 - When fallback first occurs, emit one highlighted stderr warning that regular copying is slower and may use additional disk space.
 - Copy directories recursively so regular files inside directories can still use clone/reflink.
 - Apply `defaults.copyExclude` to ignored and untracked selections before copying.

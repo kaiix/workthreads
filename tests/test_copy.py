@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import stat
+import sys
 
 import pytest
 
@@ -202,3 +204,24 @@ def test_copy_one_does_not_follow_destination_symlink_on_overwrite(tmp_path: Pat
     assert not destination.is_symlink()
     assert destination.read_text(encoding="utf-8") == "replacement"
     assert target.read_text(encoding="utf-8") == "keep"
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="uses Darwin clonefile")
+@pytest.mark.parametrize("mode", [0o751, 0o4751])
+def test_darwin_clone_keeps_permissions_and_timestamps(tmp_path: Path, mode: int) -> None:
+    source = tmp_path / "source.txt"
+    source.write_text("original", encoding="utf-8")
+    source.chmod(mode)
+    os.utime(source, ns=(1714000000234567890, 1725000000123456789))
+    original = source.stat()
+    destination = tmp_path / "clone.txt"
+
+    if not copy_module.try_clone_file(source, destination):
+        pytest.skip("test filesystem does not support Darwin clones")
+
+    cloned = destination.stat()
+    assert stat.S_IMODE(cloned.st_mode) == stat.S_IMODE(original.st_mode)
+    assert cloned.st_atime_ns == original.st_atime_ns
+    assert cloned.st_mtime_ns == original.st_mtime_ns
+    destination.write_text("changed", encoding="utf-8")
+    assert source.read_text(encoding="utf-8") == "original"

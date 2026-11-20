@@ -220,7 +220,10 @@ def clone_file_darwin(source: Path, destination: Path) -> None:
     if result != 0:
         error_number = ctypes.get_errno()
         raise OSError(error_number, os.strerror(error_number), str(destination))
-    shutil.copystat(source, destination, follow_symlinks=False)
+    # clonefile already preserves regular-file metadata, except that it clears set-ID bits.
+    mode = source.lstat().st_mode
+    if not stat.S_ISREG(mode) or mode & (stat.S_ISUID | stat.S_ISGID):
+        shutil.copystat(source, destination, follow_symlinks=False)
 
 
 def darwin_clonefile() -> Callable[[bytes, bytes, int], int]:
