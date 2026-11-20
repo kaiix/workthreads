@@ -3,9 +3,12 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import pytest
+
 from conftest import init_repo, run_git
 from workthreads import copy as copy_module
 from workthreads.copy import CopySelection, copy_one, copy_selected_files, select_local_files
+from workthreads.errors import WTError
 
 
 def test_select_and_copy_ignored_and_untracked_files(tmp_path: Path) -> None:
@@ -181,3 +184,21 @@ def test_copy_one_falls_back_when_clone_is_unavailable(tmp_path: Path, monkeypat
     copy_one(source, destination, overwrite=False)
 
     assert destination.read_text(encoding="utf-8") == "source\n"
+
+
+def test_copy_one_does_not_follow_destination_symlink_on_overwrite(tmp_path: Path) -> None:
+    source = tmp_path / "new.txt"
+    source.write_text("replacement", encoding="utf-8")
+    target = tmp_path / "original.txt"
+    target.write_text("keep", encoding="utf-8")
+    destination = tmp_path / "destination.txt"
+    destination.symlink_to(target)
+
+    with pytest.raises(WTError, match="destination already exists"):
+        copy_one(source, destination, overwrite=False)
+    assert destination.is_symlink()
+
+    copy_one(source, destination, overwrite=True)
+    assert not destination.is_symlink()
+    assert destination.read_text(encoding="utf-8") == "replacement"
+    assert target.read_text(encoding="utf-8") == "keep"

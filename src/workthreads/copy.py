@@ -98,6 +98,7 @@ def copy_selected_files(
             on_clone_fallback()
 
     counts = {"ignored": 0, "untracked": 0}
+    prepared_parents: set[Path] | None = None if overwrite else set()
     for relative_path, category in selection.files.items():
         copy_one(
             source_root / relative_path,
@@ -106,6 +107,7 @@ def copy_selected_files(
             relative_path=relative_path,
             exclude_paths=selection.exclude_paths,
             on_clone_fallback=report_clone_fallback,
+            prepared_parents=prepared_parents,
         )
         counts[category] += 1
     return CopyCounts(ignored=counts["ignored"], untracked=counts["untracked"])
@@ -119,22 +121,32 @@ def copy_one(
     relative_path: Path | None = None,
     exclude_paths: Iterable[Path] = (),
     on_clone_fallback: Callable[[], None] | None = None,
+    prepared_parents: set[Path] | None = None,
 ) -> None:
-    if destination.exists() or destination.is_symlink():
+    try:
+        destination_mode = destination.lstat().st_mode
+    except (FileNotFoundError, NotADirectoryError):
+        pass
+    else:
         if not overwrite:
             raise WTError(
                 f"destination already exists while copying local file: {destination}",
                 hint="pass --overwrite to replace existing copied files",
             )
-        if destination.is_dir() and not destination.is_symlink():
+        if stat.S_ISDIR(destination_mode):
             shutil.rmtree(destination)
         else:
             destination.unlink()
 
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    if source.is_symlink():
+    parent = destination.parent
+    if prepared_parents is None or parent not in prepared_parents:
+        parent.mkdir(parents=True, exist_ok=True)
+        if prepared_parents is not None:
+            prepared_parents.add(parent)
+    source_mode = source.lstat().st_mode
+    if stat.S_ISLNK(source_mode):
         destination.symlink_to(source.readlink())
-    elif source.is_dir():
+    elif stat.S_ISDIR(source_mode):
         copy_tree(
             source,
             destination,
